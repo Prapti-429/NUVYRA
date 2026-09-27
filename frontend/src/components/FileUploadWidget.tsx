@@ -4,7 +4,7 @@ import { useNotification } from '../contexts/NotificationContext';
 
 export interface FileUploadWidgetProps { patientId: string; onUploadSuccess?: () => void; }
 type Analysis = Record<string, unknown>;
-type UploadResult = { id?: string; filename?: string; original_filename?: string; processing_status?: string; notes?: string; analysis?: Analysis | null; created_at?: string };
+type UploadResult = { id?: string; filename?: string; original_filename?: string; processing_status?: string; notes?: string; analysis?: Analysis | null; created_at?: string; mime_type?: string };
 
 const pretty = (key: string) => key.replace(/_/g, ' ').replace(/\b\w/g, x => x.toUpperCase());
 const renderValue = (value: unknown): string => Array.isArray(value) ? value.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join(', ') : value && typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value ?? '—');
