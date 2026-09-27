@@ -38,22 +38,51 @@ def _extract_text(data: bytes, mime: str, filename: str) -> str:
         try:
             from pypdf import PdfReader
             return "\n".join((p.extract_text() or "") for p in PdfReader(BytesIO(data)).pages).strip()[:200_000]
-        except Exception: return ""
+        except Exception:
+            return ""
     if mime.startswith("text/") or filename.lower().endswith((".txt", ".csv")):
         return data.decode("utf-8", errors="ignore")[:200_000]
     if mime.startswith("image/"):
         try:
-            from PIL import Image
+            from PIL import Image, ImageEnhance, ImageFilter, ImageOps
             import pytesseract
-            return pytesseract.image_to_string(Image.open(BytesIO(data)))[:200_000].strip()
-        except Exception: return ""
+            image = Image.open(BytesIO(data)).convert("RGB")
+            # Prescriptions are frequently photographed/scanned. Run several OCR
+            # passes so light backgrounds, skewed text and mixed handwriting do
+            # not all depend on one Tesseract configuration.
+            gray = ImageOps.grayscale(image)
+            gray = ImageOps.autocontrast(gray)
+            scale = 2 if max(gray.size) < 2200 else 1
+            if scale > 1:
+                gray = gray.resize((gray.width * scale, gray.height * scale))
+            variants = [gray, gray.filter(ImageFilter.SHARPEN), ImageEnhance.Contrast(gray).enhance(1.8)]
+            outputs = []
+            for variant in variants:
+                for psm in (6, 11):
+                    try:
+                        value = pytesseract.image_to_string(variant, config=f"--psm {psm}").strip()
+                        if value:
+                            outputs.append(value)
+                    except Exception:
+                        pass
+            # Preserve useful lines while removing repeated OCR output.
+            lines=[]; seen=set()
+            for output in outputs:
+                for line in output.splitlines():
+                    line=line.strip()
+                    key=re.sub(r"\W+"," ",line.lower()).strip()
+                    if len(key)>=2 and key not in seen:
+                        seen.add(key); lines.append(line)
+            return "\n".join(lines)[:200_000]
+        except Exception:
+            return ""
     return ""
 
 def _rule_analysis(text: str, document_type: str) -> dict:
     lower = text.lower()
     tests = [name for name, pattern in TEST_PATTERNS.items() if re.search(pattern, lower)]
     medication_lines = [line.strip()[:300] for line in text.splitlines() if re.search(r"\b(tablet|capsule|mg|mcg|ml|once daily|twice daily|morning|evening|dose)\b", line, re.I)][:30]
-    dates = re.findall(r"\b(?:20\d{2}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]20\d{2})\b", text)
+    dates = re.findall(r"\b(?:20\d{2}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]20\d{2}|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+20\d{2})\b", text, re.I)
     return {"document_type": document_type, "text_extracted": bool(text.strip()), "detected_tests": tests, "possible_medication_lines": medication_lines, "dates_found": dates[:20]}
 
 async def _ai_analysis(text: str, document_type: str) -> Optional[dict]:
@@ -70,15 +99,14 @@ async def _ai_analysis(text: str, document_type: str) -> Optional[dict]:
     except Exception: return None
 
 async def _ai_image_analysis(data: bytes, mime: str, document_type: str) -> Optional[dict]:
-    """Use a vision-capable document model when a scanned/image upload has no OCR text."""
     key = os.getenv("NUVYRA_DOCUMENT_AI_API_KEY")
     base = os.getenv("NUVYRA_DOCUMENT_AI_BASE_URL", "https://api.openai.com/v1")
     model = os.getenv("NUVYRA_DOCUMENT_VISION_MODEL", os.getenv("NUVYRA_DOCUMENT_AI_MODEL", "gpt-4.1-mini"))
     if not key or not mime.startswith("image/"): return None
     encoded = base64.b64encode(data).decode("ascii")
-    prompt = f"""You are NUVYRA's document-organization assistant. Read this uploaded {document_type} image carefully. Return ONLY JSON with keys: summary, extracted_text, medications (objects with name, dose, frequency only when explicitly visible), mentioned_tests, dates, follow_up_mentions, uncertainty_notes. Transcribe only text that is actually visible. Do not diagnose, interpret results as normal/abnormal, recommend treatment, or invent missing values. If handwriting or a value is unclear, put it in uncertainty_notes and do not guess."""
+    prompt = f"""You are NUVYRA's document-organization assistant. Read this uploaded {document_type} image carefully. Return ONLY JSON with keys: summary, extracted_text, medications (objects with name, dose, frequency only when explicitly visible), mentioned_tests, dates, follow_up_mentions, uncertainty_notes. Transcribe printed text and clearly legible handwriting. Do not diagnose, interpret results as normal/abnormal, recommend treatment, or invent missing values. If handwriting or a value is unclear, put it in uncertainty_notes and do not guess."""
     try:
-        async with httpx.AsyncClient(timeout=45) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             r = await client.post(f"{base.rstrip('/')}/chat/completions", headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, json={"model": model, "temperature": 0, "response_format": {"type": "json_object"}, "messages":[{"role":"system","content":"Return only valid JSON. Never make medical decisions."},{"role":"user","content":[{"type":"text","text":prompt},{"type":"image_url","image_url":{"url":f"data:{mime};base64,{encoded}","detail":"high"}}]}]})
             r.raise_for_status(); result=json.loads(r.json()["choices"][0]["message"]["content"])
             return result if isinstance(result,dict) else None
@@ -103,19 +131,24 @@ async def upload_medical_document(document_type: str = Form(...), file: UploadFi
     if len(data)>MAX_FILE_BYTES: raise HTTPException(413,"File is too large. Maximum size is 12 MB.")
     mime=file.content_type or "application/octet-stream"; filename=file.filename or "document"
     text=_extract_text(data,mime,filename)
+    # For images, always run the vision pass when configured. OCR can return a
+    # few misleading characters and must not prevent the stronger document
+    # reader from seeing the original image.
+    ai_result=await _ai_image_analysis(data,mime,document_type) if mime.startswith("image/") else await _ai_analysis(text,document_type)
+    if ai_result:
+        vision_text=ai_result.get("extracted_text") if isinstance(ai_result.get("extracted_text"),str) else ""
+        if vision_text.strip(): text=vision_text
     analysis=_rule_analysis(text,document_type)
-    ai_result=await _ai_analysis(text,document_type) if text else await _ai_image_analysis(data,mime,document_type)
     if ai_result:
         analysis["ai_analysis"]={**ai_result,"engine":"configured document AI","non_diagnostic":True}
-        vision_text=ai_result.get("extracted_text") if isinstance(ai_result.get("extracted_text"),str) else ""
-        if not text and vision_text:
-            text=vision_text
-            analysis["text_extracted"]=True
-            analysis["detected_tests"]=list(dict.fromkeys(analysis["detected_tests"] + [str(x) for x in ai_result.get("mentioned_tests",[]) if x]))
-            analysis["dates_found"]=list(dict.fromkeys(analysis["dates_found"] + [str(x) for x in ai_result.get("dates",[]) if x]))[:20]
-            analysis["possible_medication_lines"]=[f"{m.get('name','')} {m.get('dose','')} {m.get('frequency','')}".strip() for m in ai_result.get("medications",[]) if isinstance(m,dict)]
+        analysis["detected_tests"]=list(dict.fromkeys(analysis["detected_tests"] + [str(x) for x in ai_result.get("mentioned_tests",[]) if x]))
+        analysis["dates_found"]=list(dict.fromkeys(analysis["dates_found"] + [str(x) for x in ai_result.get("dates",[]) if x]))[:20]
+        ai_meds=[]
+        for m in ai_result.get("medications",[]):
+            if isinstance(m,dict): ai_meds.append(" ".join(str(m.get(k,"")) for k in ("name","dose","frequency") if m.get(k)).strip())
+        if ai_meds: analysis["possible_medication_lines"]=ai_meds
     else:
-        analysis["ai_analysis"]={"engine":"local document intelligence","non_diagnostic":True,"note":"No OCR/vision service returned readable text for this image. The original file was saved; no medical information was guessed."}
+        analysis["ai_analysis"]={"engine":"local OCR/document intelligence","non_diagnostic":True,"note":"No configured vision service returned additional image text. The original file was saved; no medical information was guessed."}
     analysis["extracted_text_preview"] = text[:12000] if text else ""
     analysis["extracted_character_count"] = len(text)
     analysis["review_note"] = "Extracted information is for organization and reminders. Review the original document and confirm medical decisions with a clinician." if text else "No readable text was extracted. Review the original document manually."
