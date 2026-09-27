@@ -10,6 +10,11 @@ export interface AIAnalysisRequest {
   concentration_level?: number;
   physical_comfort?: number;
   appetite_level?: number;
+  mood_level?: number;
+  sleep_hours?: number;
+  sleep_awakenings?: number;
+  physical_comfort_observation?: string;
+  physical_comfort_notes?: string;
   voice_rms?: number;
   voice_zero_crossing_rate?: number;
   voice_pitch_hz?: number;
