@@ -38,6 +38,25 @@ export interface AIAnalysisRequest {
 }
 
 export interface BiomarkerFeature { name: string; category: string; value: number; deviation?: number | null; }
+export interface AIContextSummary {
+  past_history_count: number;
+  document_count: number;
+  pending_reminder_count: number;
+  document_types: string[];
+  context_used: string[];
+  history_items: string[];
+  analyzed_documents: Array<{
+    filename: string;
+    document_type: string;
+    uploaded_at?: string | null;
+    text_extracted: boolean;
+    tests: string[];
+    medications: string[];
+    dates: string[];
+    follow_up_mentions: string[];
+    summary: string;
+  }>;
+}
 export interface AIAnalysisResponse {
   check_in_id: string; overall_score: number; trend: string; confidence: number;
   model_name: string; model_version: string; baseline_observations: number;
@@ -45,6 +64,7 @@ export interface AIAnalysisResponse {
   data_quality_score: number; modalities_present: string[]; top_drivers: string[];
   recommendations: string[]; limitations: string[]; missing_modalities: string[];
   persistence_signal: string;
+  context: AIContextSummary;
 }
 export interface AIHistoryPoint { check_in_id: string; score: number; trend: string; confidence: number; generated_at: string; }
 export interface AIHistoryResponse { items: AIHistoryPoint[]; baseline_observations: number; model_name: string; model_version: string; }
