@@ -64,6 +64,8 @@ class AIContextSummary(BaseModel):
     pending_reminder_count: int = 0
     document_types: List[str] = Field(default_factory=list)
     context_used: List[str] = Field(default_factory=list)
+    history_items: List[str] = Field(default_factory=list)
+    analyzed_documents: List[dict] = Field(default_factory=list)
 
 
 class AIAnalysisResponse(BaseModel):
