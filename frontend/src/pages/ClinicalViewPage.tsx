@@ -152,6 +152,19 @@ export const ClinicalViewPage: React.FC = () => {
         </Section>
       </div>
 
+      <Section title="Saved patient history & document context" subtitle="This section shows what was actually saved or extracted from prior records and what is available as context for the current review.">
+        {analysis?.context ? <div className="space-y-5">
+          <div className="grid sm:grid-cols-3 gap-3">
+            <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3"><span className="text-[9px] uppercase text-slate-600">Past history records</span><p className="text-sm text-slate-200 mt-1">{analysis.context.past_history_count}</p></div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3"><span className="text-[9px] uppercase text-slate-600">Uploaded documents</span><p className="text-sm text-slate-200 mt-1">{analysis.context.document_count}</p></div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3"><span className="text-[9px] uppercase text-slate-600">Pending reminders</span><p className="text-sm text-slate-200 mt-1">{analysis.context.pending_reminder_count}</p></div>
+          </div>
+          {analysis.context.history_items?.length ? <div><h3 className="text-sm font-semibold text-white">Saved patient history</h3><div className="mt-2 space-y-2">{analysis.context.history_items.slice(0,10).map((item,i)=><div key={i} className="rounded-lg border border-slate-800 bg-slate-950/30 p-3 text-xs text-slate-300">{item}</div>)}</div></div> : null}
+          {analysis.context.analyzed_documents?.length ? <div><h3 className="text-sm font-semibold text-white">What was extracted from uploaded documents</h3><div className="mt-2 space-y-3">{analysis.context.analyzed_documents.slice(0,10).map((doc,i)=><div key={i} className="rounded-xl border border-slate-800 bg-slate-950/30 p-4"><div className="flex flex-wrap justify-between gap-2"><p className="text-sm font-medium text-white">{doc.filename}</p><span className="text-[10px] text-slate-500">{doc.document_type} · {doc.text_extracted ? 'readable text extracted' : 'no readable text'}</span></div>{doc.summary && <p className="text-xs text-slate-400 mt-2 leading-5">{doc.summary}</p>}<div className="mt-3 grid md:grid-cols-2 gap-2 text-[11px] text-slate-500"><div>Tests: {doc.tests?.length ? doc.tests.join(', ') : 'None identified'}</div><div>Medications: {doc.medications?.length ? doc.medications.join(', ') : 'None identified'}</div><div>Dates: {doc.dates?.length ? doc.dates.join(', ') : 'None identified'}</div><div>Follow-up: {doc.follow_up_mentions?.length ? doc.follow_up_mentions.join('; ') : 'None identified'}</div></div></div>)}</div></div> : <p className="text-sm text-slate-500">No uploaded document analysis is currently available.</p>}
+          <p className="text-[11px] text-slate-600">Document findings are contextual information only. NUVYRA does not convert extracted text into a diagnosis or silently assume missing information.</p>
+        </div> : <p className="text-sm text-slate-500">No saved patient context is available for the latest observation.</p>}
+      </Section>
+
       <Section title="Multimodal interpretation" subtitle="The model layer explains what contributed to the experimental composite; it does not make a clinical diagnosis.">
         <div className="grid lg:grid-cols-2 gap-5">
           <div><h3 className="text-sm font-semibold text-white mb-2">Observed pattern</h3><p className="text-sm leading-6 text-slate-300">{analysis?.explanation || 'No model explanation is available for the latest observation.'}</p></div>
