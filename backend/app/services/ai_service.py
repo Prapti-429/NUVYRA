@@ -53,14 +53,50 @@ class AIService:
         return out
 
     def _context(self, user_id: UUID) -> AIContextSummary:
-        histories = self.db.execute(select(PastHistoryRecord).where(PastHistoryRecord.user_id == user_id)).scalars().all()
-        docs = self.db.execute(select(MedicalDocument).where(MedicalDocument.user_id == user_id)).scalars().all()
+        histories = self.db.execute(select(PastHistoryRecord).where(PastHistoryRecord.user_id == user_id).order_by(PastHistoryRecord.created_at.desc())).scalars().all()
+        docs = self.db.execute(select(MedicalDocument).where(MedicalDocument.user_id == user_id).order_by(MedicalDocument.uploaded_at.desc())).scalars().all()
         pending = self.db.execute(select(HealthReminder).where(HealthReminder.user_id == user_id, HealthReminder.completed.is_(False))).scalars().all()
         used = []
-        if histories: used.append("user-reported past history")
-        if docs: used.append("uploaded document analysis metadata")
-        if pending: used.append("pending reminders")
-        return AIContextSummary(past_history_count=len(histories), document_count=len(docs), pending_reminder_count=len(pending), document_types=sorted({d.document_type for d in docs if d.document_type}), context_used=used)
+        history_items = []
+        analyzed_documents = []
+        if histories:
+            used.append("saved patient-reported past history")
+            for h in histories:
+                item = h.illness_name
+                if h.current_status:
+                    item += f" — status: {h.current_status}"
+                if h.diagnosed_on:
+                    item += f" — diagnosed: {h.diagnosed_on.isoformat()}"
+                if h.details:
+                    item += f" — details: {h.details[:300]}"
+                history_items.append(item)
+        if docs:
+            used.append("saved uploaded document analyses")
+            for d in docs:
+                analysis = d.analysis or {}
+                ai = analysis.get("ai_analysis") or {}
+                analyzed_documents.append({
+                    "filename": d.filename,
+                    "document_type": d.document_type,
+                    "uploaded_at": d.uploaded_at.isoformat() if d.uploaded_at else None,
+                    "text_extracted": bool(analysis.get("text_extracted") or d.extracted_text),
+                    "tests": list(analysis.get("detected_tests") or ai.get("mentioned_tests") or [])[:20],
+                    "medications": list(analysis.get("possible_medication_lines") or [])[:20],
+                    "dates": list(analysis.get("dates_found") or [])[:20],
+                    "follow_up_mentions": list(ai.get("follow_up_mentions") or [])[:20],
+                    "summary": str(ai.get("summary") or "")[:500],
+                })
+        if pending:
+            used.append("pending document/test reminders")
+        return AIContextSummary(
+            past_history_count=len(histories),
+            document_count=len(docs),
+            pending_reminder_count=len(pending),
+            document_types=sorted({d.document_type for d in docs if d.document_type}),
+            context_used=used,
+            history_items=history_items[:30],
+            analyzed_documents=analyzed_documents[:30],
+        )
 
     @staticmethod
     def _median_mad(values: List[float]) -> Tuple[float, float]:
