@@ -7,7 +7,9 @@ is medically necessary.
 from datetime import date, timedelta, datetime, timezone
 from io import BytesIO
 from typing import Optional
+import base64
 import json
+import os
 import re
 import uuid
 import httpx
@@ -55,9 +57,9 @@ def _rule_analysis(text: str, document_type: str) -> dict:
     return {"document_type": document_type, "text_extracted": bool(text.strip()), "detected_tests": tests, "possible_medication_lines": medication_lines, "dates_found": dates[:20]}
 
 async def _ai_analysis(text: str, document_type: str) -> Optional[dict]:
-    key = __import__("os").getenv("NUVYRA_DOCUMENT_AI_API_KEY")
-    base = __import__("os").getenv("NUVYRA_DOCUMENT_AI_BASE_URL", "https://api.openai.com/v1")
-    model = __import__("os").getenv("NUVYRA_DOCUMENT_AI_MODEL", "gpt-4.1-mini")
+    key = os.getenv("NUVYRA_DOCUMENT_AI_API_KEY")
+    base = os.getenv("NUVYRA_DOCUMENT_AI_BASE_URL", "https://api.openai.com/v1")
+    model = os.getenv("NUVYRA_DOCUMENT_AI_MODEL", "gpt-4.1-mini")
     if not key or not text.strip(): return None
     prompt = f"""You are NUVYRA's document-organization assistant. Analyze this {document_type} only for organization. Return JSON with keys: summary (short plain-language description of what the document contains), medications (array of objects with name, dose, frequency only when explicitly readable), mentioned_tests (array), dates (array), follow_up_mentions (array of text that explicitly mention follow-up/repeat testing), uncertainty_notes (array). Never diagnose, infer a disease, interpret a lab result as normal/abnormal, recommend treatment, or invent missing values. If unclear, say unclear. Document text:\n{text[:120000]}"""
     try:
@@ -65,6 +67,21 @@ async def _ai_analysis(text: str, document_type: str) -> Optional[dict]:
             r = await client.post(f"{base.rstrip('/')}/chat/completions", headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, json={"model": model, "temperature": 0, "response_format": {"type": "json_object"}, "messages":[{"role":"system","content":"Return only valid JSON. Do not make medical decisions."},{"role":"user","content":prompt}]})
             r.raise_for_status(); result = json.loads(r.json()["choices"][0]["message"]["content"])
             return result if isinstance(result, dict) else None
+    except Exception: return None
+
+async def _ai_image_analysis(data: bytes, mime: str, document_type: str) -> Optional[dict]:
+    """Use a vision-capable document model when a scanned/image upload has no OCR text."""
+    key = os.getenv("NUVYRA_DOCUMENT_AI_API_KEY")
+    base = os.getenv("NUVYRA_DOCUMENT_AI_BASE_URL", "https://api.openai.com/v1")
+    model = os.getenv("NUVYRA_DOCUMENT_VISION_MODEL", os.getenv("NUVYRA_DOCUMENT_AI_MODEL", "gpt-4.1-mini"))
+    if not key or not mime.startswith("image/"): return None
+    encoded = base64.b64encode(data).decode("ascii")
+    prompt = f"""You are NUVYRA's document-organization assistant. Read this uploaded {document_type} image carefully. Return ONLY JSON with keys: summary, extracted_text, medications (objects with name, dose, frequency only when explicitly visible), mentioned_tests, dates, follow_up_mentions, uncertainty_notes. Transcribe only text that is actually visible. Do not diagnose, interpret results as normal/abnormal, recommend treatment, or invent missing values. If handwriting or a value is unclear, put it in uncertainty_notes and do not guess."""
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            r = await client.post(f"{base.rstrip('/')}/chat/completions", headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, json={"model": model, "temperature": 0, "response_format": {"type": "json_object"}, "messages":[{"role":"system","content":"Return only valid JSON. Never make medical decisions."},{"role":"user","content":[{"type":"text","text":prompt},{"type":"image_url","image_url":{"url":f"data:{mime};base64,{encoded}","detail":"high"}}]}]})
+            r.raise_for_status(); result=json.loads(r.json()["choices"][0]["message"]["content"])
+            return result if isinstance(result,dict) else None
     except Exception: return None
 
 @router.get("")
@@ -85,12 +102,23 @@ async def upload_medical_document(document_type: str = Form(...), file: UploadFi
     if not data: raise HTTPException(400,"The uploaded file is empty.")
     if len(data)>MAX_FILE_BYTES: raise HTTPException(413,"File is too large. Maximum size is 12 MB.")
     mime=file.content_type or "application/octet-stream"; filename=file.filename or "document"
-    text=_extract_text(data,mime,filename); analysis=_rule_analysis(text,document_type); ai_result=await _ai_analysis(text,document_type)
-    if ai_result: analysis["ai_analysis"]={**ai_result,"engine":"configured document AI","non_diagnostic":True}
-    else: analysis["ai_analysis"]={"engine":"local document intelligence","non_diagnostic":True,"note":"Rule-based extraction was used because external document AI was unavailable or the document was not text-readable."}
+    text=_extract_text(data,mime,filename)
+    analysis=_rule_analysis(text,document_type)
+    ai_result=await _ai_analysis(text,document_type) if text else await _ai_image_analysis(data,mime,document_type)
+    if ai_result:
+        analysis["ai_analysis"]={**ai_result,"engine":"configured document AI","non_diagnostic":True}
+        vision_text=ai_result.get("extracted_text") if isinstance(ai_result.get("extracted_text"),str) else ""
+        if not text and vision_text:
+            text=vision_text
+            analysis["text_extracted"]=True
+            analysis["detected_tests"]=list(dict.fromkeys(analysis["detected_tests"] + [str(x) for x in ai_result.get("mentioned_tests",[]) if x]))
+            analysis["dates_found"]=list(dict.fromkeys(analysis["dates_found"] + [str(x) for x in ai_result.get("dates",[]) if x]))[:20]
+            analysis["possible_medication_lines"]=[f"{m.get('name','')} {m.get('dose','')} {m.get('frequency','')}".strip() for m in ai_result.get("medications",[]) if isinstance(m,dict)]
+    else:
+        analysis["ai_analysis"]={"engine":"local document intelligence","non_diagnostic":True,"note":"No OCR/vision service returned readable text for this image. The original file was saved; no medical information was guessed."}
     analysis["extracted_text_preview"] = text[:12000] if text else ""
     analysis["extracted_character_count"] = len(text)
-    analysis["review_note"] = "Extracted information is for organization and reminders. Review the original document and confirm medical decisions with a clinician." if text else "No readable text was extracted. Review the original document manually; scanned images require OCR support."
+    analysis["review_note"] = "Extracted information is for organization and reminders. Review the original document and confirm medical decisions with a clinician." if text else "No readable text was extracted. Review the original document manually."
     doc=MedicalDocument(user_id=current_user.id,document_type=document_type,filename=filename,mime_type=mime,extracted_text=text[:200_000] or None,analysis=analysis); db.add(doc); db.flush()
     mentioned=set(analysis.get("detected_tests",[])) | set((analysis.get("ai_analysis") or {}).get("mentioned_tests",[]))
     if document_type.lower()=="prescription":
