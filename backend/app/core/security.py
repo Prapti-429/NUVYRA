@@ -49,17 +49,35 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify both current PBKDF2 hashes and legacy bcrypt hashes.
+    """Verify current PBKDF2 hashes and supported legacy password formats.
 
-    Older NUVYRA accounts were hashed directly with bcrypt. Those hashes must
-    be checked against the original password rather than the newer SHA-256
-    pre-hash. New PBKDF2 accounts use the bounded material above.
+    Older deployments may contain bcrypt hashes or PBKDF2 hashes created
+    directly from the password before the SHA-256 pre-hash was introduced.
     """
     if not hashed_password:
         return False
     if hashed_password.startswith(("$2a$", "$2b$", "$2y$")):
         return pwd_context.verify(plain_password, hashed_password)
-    return pwd_context.verify(_password_material(plain_password), hashed_password)
+
+    # Current format: PBKDF2 over a fixed-length SHA-256 representation.
+    if pwd_context.verify(_password_material(plain_password), hashed_password):
+        return True
+
+    # Compatibility with older PBKDF2 records created from the raw password.
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def password_uses_legacy_raw_material(plain_password: str, hashed_password: str) -> bool:
+    """Identify legacy raw-password PBKDF2 hashes so they can be upgraded."""
+    if not hashed_password or hashed_password.startswith(("$2a$", "$2b$", "$2y$")):
+        return False
+    try:
+        return (
+            pwd_context.verify(plain_password, hashed_password)
+            and not pwd_context.verify(_password_material(plain_password), hashed_password)
+        )
+    except (ValueError, TypeError):
+        return False
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
