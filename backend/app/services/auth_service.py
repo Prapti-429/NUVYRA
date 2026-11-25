@@ -89,7 +89,25 @@ class AuthenticationService:
             else:
                 locked_until = locked_until.astimezone(timezone.utc)
             if locked_until > now:
-                raise AccountLockedException(f"Account is locked until {locked_until.isoformat()} UTC.")
+                remaining_seconds = max(1, int((locked_until - now).total_seconds()))
+                remaining_minutes = max(1, (remaining_seconds + 59) // 60)
+                self._safe_audit(
+                    action="LOGIN_BLOCKED_LOCKOUT",
+                    user_id=user.id,
+                    actor_email=user.email,
+                    status="FAILURE",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    extra_data={"remaining_seconds": remaining_seconds},
+                )
+                raise AccountLockedException(
+                    f"Too many unsuccessful sign-in attempts. Try again in about {remaining_minutes} minute(s)."
+                )
+            # The lockout window has elapsed. Clear stale lock state before
+            # checking the supplied password so a returning user starts fresh.
+            user.locked_until = None
+            user.failed_login_attempts = 0
+            self.db.commit()
         if not user.is_active:
             raise AccountDisabledException()
         if not verify_password(payload.password, user.hashed_password):
