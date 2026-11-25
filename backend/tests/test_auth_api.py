@@ -116,6 +116,52 @@ def test_expired_account_lockout_allows_login_and_resets_counter(
     assert test_patient_user.locked_until is None
 
 
+def test_newly_registered_account_can_login_with_same_password(client: TestClient) -> None:
+    """Registration and login must use the same password-hash contract."""
+    payload = {
+        "email": "fresh-account@example.com",
+        "password": "NewAccountSecure123!",
+        "full_name": "Fresh Account",
+        "role": "patient",
+    }
+    registration = client.post("/api/v1/auth/register", json=payload)
+    assert registration.status_code == status.HTTP_201_CREATED
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert login.status_code == status.HTTP_200_OK
+    assert login.json().get("access_token")
+
+
+def test_legacy_raw_pbkdf2_password_hash_can_login_and_is_upgraded(
+    client: TestClient,
+    test_patient_user: User,
+    db_session,
+) -> None:
+    """A PBKDF2 hash from the previous raw-password format remains usable."""
+    from app.core.security import hash_password, pwd_context
+
+    test_patient_user.hashed_password = pwd_context.hash("SecurePassword123!")
+    db_session.commit()
+    legacy_hash = test_patient_user.hashed_password
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "patient@example.com",
+            "password": "SecurePassword123!",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    db_session.refresh(test_patient_user)
+    assert test_patient_user.hashed_password != legacy_hash
+    assert test_patient_user.hashed_password.startswith("$pbkdf2-sha256$")
+    assert test_patient_user.hashed_password != hash_password("different password")
+
+
 def test_rbac_admin_endpoint_forbidden_for_patient(client: TestClient, test_patient_user: User) -> None:
     """Tests that patient account is forbidden from hitting admin endpoints."""
     # Login as patient
