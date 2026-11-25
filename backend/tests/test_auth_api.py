@@ -5,6 +5,8 @@ Validates registration, authentication workflows, lockout thresholds,
 token rotation, and RBAC access boundaries.
 """
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import status
 from fastapi.testclient import TestClient
 
@@ -87,6 +89,31 @@ def test_account_lockout_after_max_failed_attempts(client: TestClient, test_pati
     # 6th attempt should return HTTP 423 Locked
     response = client.post("/api/v1/auth/login", json=payload)
     assert response.status_code == status.HTTP_423_LOCKED
+
+
+def test_expired_account_lockout_allows_login_and_resets_counter(
+    client: TestClient,
+    test_patient_user: User,
+    db_session,
+) -> None:
+    """An expired lock must not keep a valid account blocked."""
+    test_patient_user.failed_login_attempts = 5
+    test_patient_user.locked_until = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "patient@example.com",
+            "password": "SecurePassword123!",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json().get("access_token")
+    db_session.refresh(test_patient_user)
+    assert test_patient_user.failed_login_attempts == 0
+    assert test_patient_user.locked_until is None
 
 
 def test_rbac_admin_endpoint_forbidden_for_patient(client: TestClient, test_patient_user: User) -> None:
