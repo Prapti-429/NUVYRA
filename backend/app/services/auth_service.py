@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import InvalidCredentialsException, AccountLockedException, AccountDisabledException, InvalidTokenError, TokenRevokedError
 from app.core.jwt import JWTEngine
-from app.core.security import hash_password, verify_password
+from app.core.security import hash_password, verify_password, password_uses_legacy_raw_material
 from app.db.models import User
 from app.repositories.base import DuplicateEntityError
 from app.repositories.session_repository import SessionRepository
@@ -118,6 +118,10 @@ class AuthenticationService:
             self._safe_audit(action="LOGIN_FAILED", user_id=user.id, actor_email=user.email, status="FAILURE", ip_address=ip_address, user_agent=user_agent, extra_data={"attempts": user.failed_login_attempts})
             raise InvalidCredentialsException()
 
+        # Transparently migrate older PBKDF2 records after a successful
+        # legacy-format verification. The user's password itself is unchanged.
+        if password_uses_legacy_raw_material(payload.password, user.hashed_password):
+            user.hashed_password = hash_password(payload.password)
         user.failed_login_attempts = 0
         user.locked_until = None
         user.last_login_at = now
