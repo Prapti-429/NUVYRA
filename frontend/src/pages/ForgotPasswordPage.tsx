@@ -36,10 +36,12 @@ export const ForgotPasswordPage: React.FC = () => {
         setMessage(response.data?.detail || 'Your password has been reset. Please sign in.');
       } else {
         const response = await apiClient.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
-        setMessage(response.data?.detail || 'If an account exists for that email, a reset link will be sent shortly.');
+        setMessage(response.data?.detail || 'If an account exists for that email, a reset link will be sent shortly. Check your inbox and spam folder. Check your inbox and spam folder.');
       }
     } catch (requestError: any) {
-      setError(requestError?.response?.data?.detail || requestError?.message || 'We could not complete this request. Please try again.');
+      setError(requestError?.status === 503
+        ? 'NUVYRA cannot send password-reset emails right now. Please try again later or contact support.'
+        : requestError?.response?.data?.detail || requestError?.message || 'We could not complete this request. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -53,7 +55,7 @@ export const ForgotPasswordPage: React.FC = () => {
           {token ? 'Create a new password' : 'Reset your password'}
         </h1>
         <p className="mt-2 text-sm text-slate-400">
-          {token ? 'Choose a new password for your NUVYRA account.' : 'Enter the email address associated with your NUVYRA account. We will send a secure reset link if an account matches.'}
+          {token ? 'Choose a new password for your NUVYRA account.' : 'Enter your registered email. If it matches an active NUVYRA account, we’ll send a secure, one-use link that expires in 30 minutes.'}
         </p>
       </div>
 
