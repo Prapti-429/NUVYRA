@@ -10,12 +10,15 @@ export const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [connectionSlow, setConnectionSlow] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setLoading(true);
+    setConnectionSlow(false);
+    const slowTimer = setTimeout(() => setConnectionSlow(true), 1800);
 
     try {
       await login(email, password);
@@ -33,7 +36,9 @@ export const LoginPage: React.FC = () => {
           : 'Authentication failed. Please verify credentials or connection.'
       );
     } finally {
+      clearTimeout(slowTimer);
       setLoading(false);
+      setConnectionSlow(false);
     }
   };
 
@@ -99,8 +104,15 @@ export const LoginPage: React.FC = () => {
               disabled={loading}
               className="w-full bg-gradient-to-r from-sky-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-slate-950 font-semibold py-2.5 rounded-xl text-sm transition-all shadow-md disabled:opacity-50"
             >
-              {loading ? 'Authenticating...' : 'Sign In'}
+              {loading ? 'Signing you in…' : 'Sign In'}
             </button>
+            {loading && (
+              <p role="status" aria-live="polite" className="text-center text-xs text-sky-300 mt-3">
+                {connectionSlow
+                  ? 'Waking up your secure NUVYRA connection. Keep this screen open for a moment…'
+                  : 'Securely connecting to your NUVYRA account…'}
+              </p>
+            )}
           </form>
 
           <div className="pt-4 border-t border-slate-800 text-center">
