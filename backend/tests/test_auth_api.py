@@ -9,11 +9,14 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import status
 from fastapi.testclient import TestClient
+from urllib.parse import parse_qs, urlparse
 
 try:
     from app.db.models import User
+    from app.db.models.auth_models import PasswordResetToken
 except ImportError:
     from models import User  # type: ignore
+    from app.db.models.auth_models import PasswordResetToken
 
 
 def test_user_registration_success(client: TestClient) -> None:
@@ -215,6 +218,96 @@ def test_legacy_raw_pbkdf2_password_hash_can_login_and_is_upgraded(
     assert test_patient_user.hashed_password.startswith("$pbkdf2-sha256$")
     assert test_patient_user.hashed_password != hash_password("different password")
 
+
+
+def test_forgot_password_sends_single_use_reset_link_and_updates_password(
+    client: TestClient,
+    test_patient_user: User,
+    db_session,
+    monkeypatch,
+) -> None:
+    """A verified email reset link changes the password and revokes old sessions."""
+    from app.core.config import settings
+    import app.services.auth_service as auth_service_module
+
+    sent_messages = []
+
+    class FakeSMTP:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def starttls(self):
+            pass
+
+        def login(self, *args):
+            pass
+
+        def send_message(self, message):
+            sent_messages.append(message)
+
+    monkeypatch.setattr(auth_service_module.smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.example.test")
+    monkeypatch.setattr(settings, "SMTP_FROM_EMAIL", "no-reply@nuvyra.example")
+    monkeypatch.setattr(settings, "SMTP_USERNAME", "smtp-user")
+    monkeypatch.setattr(settings, "SMTP_PASSWORD", "smtp-password")
+
+    requested = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "PATIENT@example.com"},
+    )
+    assert requested.status_code == status.HTTP_200_OK
+    assert "If an account exists" in requested.json()["detail"]
+    assert len(sent_messages) == 1
+
+    body = sent_messages[0].get_content()
+    reset_url = next(line for line in body.splitlines() if "/reset-password?token=" in line)
+    raw_token = parse_qs(urlparse(reset_url).query)["token"][0]
+    reset_record = db_session.query(PasswordResetToken).one()
+    assert reset_record.is_used is False
+
+    reset = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": raw_token, "new_password": "BrandNewSecurePassword2026!"},
+    )
+    assert reset.status_code == status.HTTP_200_OK
+    db_session.refresh(reset_record)
+    assert reset_record.is_used is True
+
+    old_login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "patient@example.com", "password": "SecurePassword123!"},
+    )
+    assert old_login.status_code == status.HTTP_401_UNAUTHORIZED
+
+    new_login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "patient@example.com", "password": "BrandNewSecurePassword2026!"},
+    )
+    assert new_login.status_code == status.HTTP_200_OK
+
+
+def test_forgot_password_does_not_disclose_unknown_email(client: TestClient) -> None:
+    """Unknown addresses receive the same public response without sending mail."""
+    response = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "not-registered@example.com"},
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["detail"] == "If an account exists for that email, a password reset link will be sent shortly."
+
+
+def test_password_reset_rejects_invalid_and_expired_tokens(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "not-a-valid-reset-token", "new_password": "BrandNewSecurePassword2026!"},
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 def test_rbac_admin_endpoint_forbidden_for_patient(client: TestClient, test_patient_user: User) -> None:
     """Tests that patient account is forbidden from hitting admin endpoints."""
