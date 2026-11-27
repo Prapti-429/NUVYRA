@@ -1,16 +1,23 @@
 """Authentication service for registration, login, refresh rotation and logout."""
 
 import hashlib
+import logging
+import secrets
+import smtplib
+from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.core.exceptions import InvalidCredentialsException, AccountLockedException, AccountDisabledException, InvalidTokenError, TokenRevokedError
+from app.core.config import settings
 from app.core.jwt import JWTEngine
 from app.core.security import hash_password, verify_password, password_uses_legacy_raw_material
 from app.db.models import User
+from app.db.models.auth_models import PasswordResetToken
 from app.repositories.base import DuplicateEntityError
 from app.repositories.session_repository import SessionRepository
 from app.repositories.user_repository import UserRepository
@@ -21,6 +28,9 @@ from app.schemas.auth_schemas import LoginRequest, TokenResponse, UserRegisterRe
 
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_DURATION_MINUTES = 15
+PASSWORD_RESET_TTL_MINUTES = 30
+PASSWORD_RESET_RESEND_SECONDS = 60
+logger = logging.getLogger(__name__)
 
 
 class AuthenticationService:
@@ -231,6 +241,123 @@ class AuthenticationService:
             expires_in=self.jwt_engine.access_token_expire_minutes * 60,
             user=user,
         )
+
+
+    def request_password_reset(self, email: str, ip_address: Optional[str] = None) -> None:
+        """Send a short-lived, single-use password reset link without revealing account existence."""
+        smtp_ready = all((
+            settings.SMTP_HOST,
+            settings.SMTP_FROM_EMAIL,
+        ))
+        if not smtp_ready:
+            logger.error("Password reset email is unavailable: SMTP_HOST and SMTP_FROM_EMAIL must be configured.")
+            return
+
+        normalized_email = str(email).strip().lower()
+        user = self.user_repo.get_by_email(normalized_email)
+        if not user or not user.is_active:
+            return
+
+        now = datetime.now(timezone.utc)
+        recent = self.db.execute(
+            select(PasswordResetToken).where(
+                PasswordResetToken.user_id == user.id,
+                PasswordResetToken.created_at >= now - timedelta(seconds=PASSWORD_RESET_RESEND_SECONDS),
+            ).order_by(PasswordResetToken.created_at.desc())
+        ).scalars().first()
+        if recent:
+            return
+
+        # Invalidate earlier links before issuing a new one.
+        self.db.query(PasswordResetToken).filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.is_used.is_(False),
+        ).update({"is_used": True, "used_at": now}, synchronize_session=False)
+
+        raw_token = secrets.token_urlsafe(32)
+        reset_record = PasswordResetToken(
+            user_id=user.id,
+            token_hash=hashlib.sha256(raw_token.encode("utf-8")).hexdigest(),
+            request_ip=ip_address,
+            expires_at=now + timedelta(minutes=PASSWORD_RESET_TTL_MINUTES),
+            is_used=False,
+        )
+        self.db.add(reset_record)
+        self.db.commit()
+
+        reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={raw_token}"
+        message = EmailMessage()
+        message["Subject"] = "Reset your NUVYRA password"
+        message["From"] = settings.SMTP_FROM_EMAIL
+        message["To"] = normalized_email
+        message.set_content(
+            "We received a request to reset the password for your NUVYRA account.\\n\\n"
+            f"Use this secure link within {PASSWORD_RESET_TTL_MINUTES} minutes:\\n{reset_url}\\n\\n"
+            "If you did not request this, you can ignore this email. Your password will not change.\\n"
+            "For your security, this link can only be used once."
+        )
+        try:
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+                if settings.SMTP_USE_TLS:
+                    server.starttls()
+                if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
+                    server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+                server.send_message(message)
+        except Exception:
+            # Do not leave an unusable token active or expose SMTP/account details to callers.
+            reset_record.is_used = True
+            reset_record.used_at = datetime.now(timezone.utc)
+            self.db.commit()
+            logger.exception("Unable to deliver NUVYRA password-reset email.")
+
+    def reset_password(self, raw_token: str, new_password: str) -> bool:
+        """Replace a password using a valid, unexpired, single-use reset token."""
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        reset_record = self.db.execute(
+            select(PasswordResetToken).where(
+                PasswordResetToken.token_hash == token_hash,
+                PasswordResetToken.is_used.is_(False),
+            )
+        ).scalar_one_or_none()
+        if not reset_record:
+            return False
+
+        now = datetime.now(timezone.utc)
+        expires_at = reset_record.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        else:
+            expires_at = expires_at.astimezone(timezone.utc)
+        if expires_at <= now:
+            return False
+
+        user = self.user_repo.get_by_id(reset_record.user_id)
+        if not user or not user.is_active:
+            return False
+
+        user.hashed_password = hash_password(new_password)
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        reset_record.is_used = True
+        reset_record.used_at = now
+        # A password reset invalidates every other outstanding reset link.
+        self.db.query(PasswordResetToken).filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.id != reset_record.id,
+            PasswordResetToken.is_used.is_(False),
+        ).update({"is_used": True, "used_at": now}, synchronize_session=False)
+        self.db.commit()
+
+        # Force sign-in again on every device after a credential change.
+        self.session_repo.revoke_all_user_sessions(user.id)
+        self._safe_audit(
+            action="PASSWORD_RESET",
+            user_id=user.id,
+            actor_email=user.email,
+            status="SUCCESS",
+            extra_data={"method": "email_reset"},
+        )
+        return True
 
     def logout(self, session_id: str, user_id: UUID) -> bool:
         revoked = self.session_repo.revoke_session(session_id)
