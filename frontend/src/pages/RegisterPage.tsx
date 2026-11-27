@@ -32,7 +32,7 @@ export const RegisterPage: React.FC = () => {
 
     try {
       await register(email, password, fullName);
-      navigate('/', { replace: true });
+      navigate('/login-flashcard', { replace: true });
     } catch (err: any) {
       if (err.response) {
         const detail = err.response.data?.detail;
