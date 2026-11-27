@@ -86,8 +86,18 @@ class AuthenticationService:
         unusable if the follow-up request reached a differently configured
         backend instance.
         """
-        self.register_user(payload, ip_address=ip_address, user_agent=user_agent)
         login_payload = LoginRequest(email=payload.email, password=payload.password)
+        existing = self.user_repo.get_by_email(str(payload.email).strip().lower())
+        if existing:
+            # Route returning accounts through the normal login path so failed
+            # passwords increment the same lockout counters and audit events.
+            return self.authenticate_user(
+                login_payload,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+
+        self.register_user(payload, ip_address=ip_address, user_agent=user_agent)
         return self.authenticate_user(
             login_payload,
             ip_address=ip_address,
