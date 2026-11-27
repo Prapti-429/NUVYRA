@@ -17,8 +17,14 @@ export const RegisterPage: React.FC = () => {
     e.preventDefault();
     setErrorMsg(null);
 
-    if (password.length < 12) {
-      setErrorMsg('Password must be at least 12 characters long.');
+    if (
+      password.length < 12 ||
+      !/[A-Z]/.test(password) ||
+      !/[a-z]/.test(password) ||
+      !/\d/.test(password) ||
+      !/[!@#$%^&*(),.?":{}|<>]/.test(password)
+    ) {
+      setErrorMsg('Use at least 12 characters, including an uppercase letter, a lowercase letter, a number, and a special character.');
       return;
     }
 
@@ -26,7 +32,7 @@ export const RegisterPage: React.FC = () => {
 
     try {
       await register(email, password, fullName);
-      navigate('/', { replace: true });
+      navigate('/login-flashcard', { replace: true });
     } catch (err: any) {
       if (err.response) {
         const detail = err.response.data?.detail;
@@ -70,21 +76,21 @@ export const RegisterPage: React.FC = () => {
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">Full Name <span className="text-slate-500">(new accounts)</span></label>
-              <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full rounded-xl bg-slate-900 border border-slate-800 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500" placeholder="Alex Morgan" />
+              <input type="text" required autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full rounded-xl bg-slate-900 border border-slate-800 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500" placeholder="Alex Morgan" />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">Email Address</label>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-xl bg-slate-900 border border-slate-800 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500" placeholder="researcher@nuvyra.health" />
+              <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-xl bg-slate-900 border border-slate-800 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500" placeholder="researcher@nuvyra.health" />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">Password</label>
               <div className="relative">
-                <input type={showPassword ? 'text' : 'password'} required minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl bg-slate-900 border border-slate-800 px-3.5 py-2.5 pr-20 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500" />
+                <input type={showPassword ? 'text' : 'password'} required minLength={12} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl bg-slate-900 border border-slate-800 px-3.5 py-2.5 pr-20 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500" />
                 <button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800" aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? 'Hide' : 'Show'}</button>
               </div>
-              <p className="mt-1 text-[11px] text-slate-500">Use at least 12 characters. If this email already exists, your existing account will be resumed only after the password is verified.</p>
+              <p className="mt-1 text-[11px] text-slate-500">At least 12 characters, with uppercase and lowercase letters, a number, and a special character. If this email already exists, your account is resumed only after your password is verified.</p>
             </div>
 
             <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-sky-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-slate-950 font-semibold py-2.5 rounded-xl text-sm transition-all shadow-md disabled:opacity-50">

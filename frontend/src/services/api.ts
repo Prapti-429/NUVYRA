@@ -11,10 +11,11 @@ const normalizeBaseURL = (value: string): string => {
 
 export const baseURL = normalizeBaseURL(configuredURL);
 const API_ORIGIN = baseURL.replace(/\/api\/v1$/i, '');
-// Render can briefly cold-start the backend. Keep retrying long enough for the
-// service to wake up instead of surfacing a misleading browser "Network Error".
-const MAX_RETRIES = 6;
-const INITIAL_RETRY_DELAY = 1500;
+// Do not repeatedly retry browser-level network failures: CORS rejections and
+// offline devices have no HTTP response and cannot be fixed by waiting. Retry
+// one time only for gateway errors or an actual request timeout.
+const MAX_RETRIES = 1;
+const INITIAL_RETRY_DELAY = 1000;
 
 export interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
@@ -33,7 +34,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL,
-  timeout: 60000,
+  timeout: 30000,
   headers: {
     Accept: 'application/json',
   },
@@ -93,7 +94,11 @@ apiClient.interceptors.response.use(
     }
 
     const status = error.response?.status;
-    const isTransient = !error.response || status === 502 || status === 503 || status === 504 || (status !== undefined && status >= 500 && status <= 599);
+    const isTransient =
+      status === 502 ||
+      status === 503 ||
+      status === 504 ||
+      error.code === 'ECONNABORTED';
     originalRequest._retryCount = originalRequest._retryCount || 0;
     if (isTransient && originalRequest._retryCount < MAX_RETRIES) {
       originalRequest._retryCount += 1;

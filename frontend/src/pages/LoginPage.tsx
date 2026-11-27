@@ -21,7 +21,7 @@ export const LoginPage: React.FC = () => {
       await login(email, password);
       // Let the account-specific first-visit redirect decide whether the user
       // needs the onboarding tour or should go directly to the dashboard.
-      navigate('/', { replace: true });
+      navigate('/login-flashcard', { replace: true });
     } catch (err: any) {
       const serverMessage =
         err?.response?.data?.detail ||

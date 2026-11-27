@@ -21,8 +21,14 @@ export const ForgotPasswordPage: React.FC = () => {
       setError('The passwords do not match.');
       return;
     }
-    if (token && password.length < 12) {
-      setError('Your new password must contain at least 12 characters.');
+    if (token && (
+      password.length < 12 ||
+      !/[A-Z]/.test(password) ||
+      !/[a-z]/.test(password) ||
+      !/\d/.test(password) ||
+      !/[!@#$%^&*(),.?":{}|<>]/.test(password)
+    )) {
+      setError('Use at least 12 characters, including an uppercase letter, a lowercase letter, a number, and a special character.');
       return;
     }
 
@@ -36,7 +42,7 @@ export const ForgotPasswordPage: React.FC = () => {
         setMessage(response.data?.detail || 'Your password has been reset. Please sign in.');
       } else {
         const response = await apiClient.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
-        setMessage(response.data?.detail || 'If an account exists for that email, a reset link will be sent shortly.');
+        setMessage(response.data?.detail || 'If an account exists and email delivery is available, a reset link will be sent shortly. Check your spam folder if it does not arrive.');
       }
     } catch (requestError: any) {
       setError(requestError?.response?.data?.detail || requestError?.message || 'We could not complete this request. Please try again.');
@@ -78,7 +84,7 @@ export const ForgotPasswordPage: React.FC = () => {
                   <label htmlFor="confirm-password" className="block text-xs font-medium text-slate-300 mb-1">Confirm new password</label>
                   <input id="confirm-password" type="password" required minLength={12} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-xl bg-slate-900 border border-slate-800 px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-sky-500" placeholder="Enter the new password again" />
                 </div>
-                <p className="text-xs leading-5 text-slate-500">Use at least 12 characters, including uppercase and lowercase letters, a number, and a special character.</p>
+                <p className="text-xs leading-5 text-slate-500">At least 12 characters, including uppercase and lowercase letters, a number, and a special character.</p>
               </>
             )}
             <button type="submit" disabled={loading || !!message} className="w-full bg-gradient-to-r from-sky-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-slate-950 font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">
