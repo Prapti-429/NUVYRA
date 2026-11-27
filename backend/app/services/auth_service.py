@@ -291,9 +291,9 @@ class AuthenticationService:
         message["From"] = settings.SMTP_FROM_EMAIL
         message["To"] = normalized_email
         message.set_content(
-            "We received a request to reset the password for your NUVYRA account.\\n\\n"
-            f"Use this secure link within {PASSWORD_RESET_TTL_MINUTES} minutes:\\n{reset_url}\\n\\n"
-            "If you did not request this, you can ignore this email. Your password will not change.\\n"
+            "We received a request to reset the password for your NUVYRA account.\n\n"
+            f"Use this secure link within {PASSWORD_RESET_TTL_MINUTES} minutes:\n{reset_url}\n\n"
+            "If you did not request this, you can ignore this email. Your password will not change.\n"
             "For your security, this link can only be used once."
         )
         try:
