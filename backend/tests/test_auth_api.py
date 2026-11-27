@@ -135,6 +135,60 @@ def test_newly_registered_account_can_login_with_same_password(client: TestClien
     assert login.json().get("access_token")
 
 
+def test_register_session_creates_account_and_returns_tokens(client: TestClient) -> None:
+    """The combined registration flow must return a usable authenticated session."""
+    payload = {
+        "email": "atomic-registration@example.com",
+        "password": "AtomicRegistration123!",
+        "full_name": "Atomic Registration",
+        "role": "patient",
+    }
+
+    response = client.post("/api/v1/auth/register-session", json=payload)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data.get("access_token")
+    assert data.get("refresh_token")
+    assert data.get("user", {}).get("email") == payload["email"]
+
+    # The newly issued credentials must also work through the ordinary login endpoint.
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert login.status_code == status.HTTP_200_OK
+
+
+def test_register_session_resumes_existing_account_only_with_correct_password(
+    client: TestClient,
+    test_patient_user: User,
+) -> None:
+    """Existing records are resumed without creating a duplicate identity."""
+    response = client.post(
+        "/api/v1/auth/register-session",
+        json={
+            "email": "patient@example.com",
+            "password": "SecurePassword123!",
+            "full_name": "Ignored Existing Name",
+            "role": "patient",
+        },
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json().get("access_token")
+    assert response.json().get("user", {}).get("id") == str(test_patient_user.id)
+
+    rejected = client.post(
+        "/api/v1/auth/register-session",
+        json={
+            "email": "patient@example.com",
+            "password": "WrongPassword123!",
+            "full_name": "Not Allowed",
+            "role": "patient",
+        },
+    )
+    assert rejected.status_code == status.HTTP_401_UNAUTHORIZED
+
+
 def test_legacy_raw_pbkdf2_password_hash_can_login_and_is_upgraded(
     client: TestClient,
     test_patient_user: User,
