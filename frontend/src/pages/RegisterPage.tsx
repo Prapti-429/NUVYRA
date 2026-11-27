@@ -12,6 +12,7 @@ export const RegisterPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [connectionSlow, setConnectionSlow] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,6 +24,8 @@ export const RegisterPage: React.FC = () => {
     }
 
     setLoading(true);
+    setConnectionSlow(false);
+    const slowTimer = setTimeout(() => setConnectionSlow(true), 1800);
 
     try {
       await register(email, password, fullName);
@@ -43,7 +46,9 @@ export const RegisterPage: React.FC = () => {
         setErrorMsg(err.message || 'An unexpected error occurred.');
       }
     } finally {
+      clearTimeout(slowTimer);
       setLoading(false);
+      setConnectionSlow(false);
     }
   };
 
@@ -88,8 +93,15 @@ export const RegisterPage: React.FC = () => {
             </div>
 
             <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-sky-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-slate-950 font-semibold py-2.5 rounded-xl text-sm transition-all shadow-md disabled:opacity-50">
-              {loading ? 'Checking account...' : 'Continue'}
+              {loading ? 'Securing your account…' : 'Continue'}
             </button>
+            {loading && (
+              <p role="status" aria-live="polite" className="text-center text-xs text-sky-300 mt-3">
+                {connectionSlow
+                  ? 'Preparing your secure NUVYRA space. Keep this screen open for a moment…'
+                  : 'Checking your details and securely opening your account…'}
+              </p>
+            )}
           </form>
 
           <div className="pt-4 border-t border-slate-800 text-center">
