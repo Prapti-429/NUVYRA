@@ -40,7 +40,8 @@ class Settings(BaseSettings):
     # explicit in production instead of relying on a wildcard CORS policy.
     CORS_ORIGINS: str = "https://digital-biomarker-monitor.onrender.com"
 
-    # SMTP is required to deliver password-reset links in production.
+    # Resend is preferred for hosted delivery; SMTP remains available as a fallback.
+    RESEND_API_KEY: Optional[str] = None
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 587
     SMTP_USERNAME: Optional[str] = None
