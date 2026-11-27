@@ -255,7 +255,7 @@ class AuthenticationService:
                 "Password reset email is not configured. Set RESEND_API_KEY and SMTP_FROM_EMAIL "
                 "(recommended), or SMTP_HOST and SMTP_FROM_EMAIL."
             )
-            return
+            raise RuntimeError("Password reset email delivery is not configured.")
 
         normalized_email = str(email).strip().lower()
         user = self.user_repo.get_by_email(normalized_email)
@@ -335,6 +335,7 @@ class AuthenticationService:
             reset_record.used_at = datetime.now(timezone.utc)
             self.db.commit()
             logger.exception("Unable to deliver NUVYRA password-reset email.")
+            raise RuntimeError("Password reset email delivery failed.")
 
     def reset_password(self, raw_token: str, new_password: str) -> bool:
         """Replace a password using a valid, unexpired, single-use reset token."""
