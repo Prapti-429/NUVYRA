@@ -55,6 +55,28 @@ def register(
 
 
 @router.post(
+    "/register-session",
+    response_model=TokenResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Register or resume an account and issue a session",
+)
+def register_and_login(
+    payload: UserRegisterRequest,
+    db: Annotated[Session, Depends(get_db)],
+    jwt_engine: Annotated[JWTEngine, Depends(get_jwt_engine)],
+    ip_address: Annotated[Optional[str], Depends(get_client_ip)] = None,
+    user_agent: Annotated[Optional[str], Depends(get_user_agent)] = None,
+) -> TokenResponse:
+    """Complete registration/account resumption and login in one request."""
+    auth_service = AuthenticationService(db, jwt_engine)
+    return auth_service.register_and_authenticate(
+        payload,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+
+@router.post(
     "/login",
     response_model=TokenResponse,
     status_code=status.HTTP_200_OK,
