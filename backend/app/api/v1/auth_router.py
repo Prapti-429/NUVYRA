@@ -109,9 +109,17 @@ def forgot_password(
     ip_address: Annotated[Optional[str], Depends(get_client_ip)] = None,
 ) -> dict[str, str]:
     """Always return the same message to avoid disclosing whether an email is registered."""
-    AuthenticationService(db, jwt_engine).request_password_reset(
-        str(payload.email), ip_address=ip_address
-    )
+    try:
+        AuthenticationService(db, jwt_engine).request_password_reset(
+            str(payload.email), ip_address=ip_address
+        )
+    except RuntimeError as exc:
+        # Keep the response independent of whether the email belongs to an
+        # account. Only report that the delivery service itself is unavailable.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset email is temporarily unavailable. Please try again later or contact NUVYRA support.",
+        ) from exc
     return {"detail": "If an account exists for that email, a password reset link will be sent shortly."}
 
 
