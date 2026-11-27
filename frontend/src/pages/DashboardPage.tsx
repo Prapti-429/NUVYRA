@@ -63,6 +63,7 @@ export const DashboardPage: React.FC = () => {
   const [latest, setLatest] = useState<AIAnalysisResponse | null>(null);
   const [history, setHistory] = useState<AIHistoryResponse | null>(null);
   const [rewards, setRewards] = useState<{ coins: number; streak: number; last_check_in_date?: string | null } | null>(null);
+  const [flippedGuideCard, setFlippedGuideCard] = useState<number | null>(null);
   useEffect(() => { let active = true; Promise.allSettled([aiService.latest(), aiService.history(30), apiClient.get('/past-history/rewards')]).then(([a,b,c]) => { if (!active) return; if (a.status === 'fulfilled') setLatest(a.value); if (b.status === 'fulfilled') setHistory(b.value); if (c.status === 'fulfilled') setRewards(c.value.data); }); return () => { active = false; }; }, []);
   const score = latest?.overall_score ?? 0;
   const trend = latest?.trend ?? 'INITIAL';
@@ -107,6 +108,36 @@ export const DashboardPage: React.FC = () => {
             <p className="mt-2 text-xs leading-5 text-slate-400">{feature.description}</p>
             <Link to={feature.to} className="inline-flex mt-4 text-xs font-semibold text-sky-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 rounded">Open {feature.title} <span aria-hidden="true" className="ml-1">→</span></Link>
           </div>
+        ))}
+      </div>
+    </section>
+    <section aria-label="NUVYRA quick guide flashcards" className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-teal-300 font-semibold">A 30-second NUVYRA refresh</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-white mt-1">A few things worth knowing ✦</h2>
+          <p className="text-sm text-slate-400 mt-1">Tap a card to turn it over. A quick reminder whenever you sign in.</p>
+        </div>
+        <span className="text-xs text-slate-500">4 quick cards · tap to reveal</span>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { front:'What is NUVYRA looking for?', back:'Patterns and changes across repeated observations — not a diagnosis.' },
+          { front:'What is my personal baseline?', back:'A picture of your own usual pattern, built from repeated usable check-ins.' },
+          { front:'What can a check-in include?', back:'Your reported context and, when you choose, available voice and camera signals.' },
+          { front:'Can one unusual result tell me I am unwell?', back:'No. Individual readings can vary. Discuss health concerns with a qualified professional.' },
+        ].map((card, index) => (
+          <button
+            key={card.front}
+            type="button"
+            aria-pressed={flippedGuideCard === index}
+            onClick={() => setFlippedGuideCard(current => current === index ? null : index)}
+            className={`min-h-[150px] rounded-2xl border p-4 sm:p-5 text-left transition-all duration-200 hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 ${flippedGuideCard === index ? 'border-teal-400/50 bg-teal-400/10' : 'border-slate-800 bg-[#111827] hover:border-sky-500/40'}`}
+          >
+            <span className="text-[10px] uppercase tracking-[0.18em] text-sky-300">{flippedGuideCard === index ? 'The short answer' : `Quick card 0${index + 1}`}</span>
+            <span className="block mt-3 text-sm font-semibold leading-5 text-white">{flippedGuideCard === index ? card.back : card.front}</span>
+            <span className="block mt-4 text-[11px] text-slate-500">{flippedGuideCard === index ? 'Tap to turn back' : 'Tap to reveal ↗'}</span>
+          </button>
         ))}
       </div>
     </section>
