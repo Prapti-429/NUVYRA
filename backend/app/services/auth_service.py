@@ -335,7 +335,9 @@ class AuthenticationService:
             reset_record.used_at = datetime.now(timezone.utc)
             self.db.commit()
             logger.exception("Unable to deliver NUVYRA password-reset email.")
-            raise RuntimeError("Password reset email delivery failed.")
+            # Do not return a different public status for a particular address:
+            # that would reveal whether the account exists. The generic response
+            # is intentionally the same; delivery failures are recorded in logs.
 
     def reset_password(self, raw_token: str, new_password: str) -> bool:
         """Replace a password using a valid, unexpired, single-use reset token."""
