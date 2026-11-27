@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     # explicit in production instead of relying on a wildcard CORS policy.
     CORS_ORIGINS: str = "https://digital-biomarker-monitor.onrender.com"
 
+    # SMTP is required to deliver password-reset links in production.
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: Optional[str] = None
+    SMTP_USE_TLS: bool = True
+    FRONTEND_URL: str = "https://digital-biomarker-monitor.onrender.com"
+
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         """Return the configured PostgreSQL URL, or local SQLite during development.
