@@ -16,6 +16,20 @@ services:
         value: https://digital-biomarker-monitor.onrender.com
       - key: ENVIRONMENT
         value: production
+      - key: FRONTEND_URL
+        value: https://digital-biomarker-monitor.onrender.com
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_USE_TLS
+        value: "true"
 
   - type: web
     name: digital-biomarker-frontend
