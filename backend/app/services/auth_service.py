@@ -4,6 +4,9 @@ import hashlib
 import logging
 import secrets
 import smtplib
+import json
+import urllib.error
+import urllib.request
 from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -245,12 +248,13 @@ class AuthenticationService:
 
     def request_password_reset(self, email: str, ip_address: Optional[str] = None) -> None:
         """Send a short-lived, single-use password reset link without revealing account existence."""
-        smtp_ready = all((
-            settings.SMTP_HOST,
-            settings.SMTP_FROM_EMAIL,
-        ))
-        if not smtp_ready:
-            logger.error("Password reset email is unavailable: SMTP_HOST and SMTP_FROM_EMAIL must be configured.")
+        resend_ready = bool(settings.RESEND_API_KEY and settings.SMTP_FROM_EMAIL)
+        smtp_ready = bool(settings.SMTP_HOST and settings.SMTP_FROM_EMAIL)
+        if not (resend_ready or smtp_ready):
+            logger.error(
+                "Password reset email is not configured. Set RESEND_API_KEY and SMTP_FROM_EMAIL "
+                "(recommended), or SMTP_HOST and SMTP_FROM_EMAIL."
+            )
             return
 
         normalized_email = str(email).strip().lower()
@@ -297,14 +301,36 @@ class AuthenticationService:
             "For your security, this link can only be used once."
         )
         try:
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
-                if settings.SMTP_USE_TLS:
-                    server.starttls()
-                if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
-                    server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-                server.send_message(message)
-        except Exception:
-            # Do not leave an unusable token active or expose SMTP/account details to callers.
+            if resend_ready:
+                # Resend's HTTP API is more reliable on hosted platforms where
+                # outbound SMTP ports may be restricted. The sender must be
+                # verified in the Resend account before delivery is accepted.
+                request = urllib.request.Request(
+                    url="https://api.resend.com/emails",
+                    data=json.dumps({
+                        "from": settings.SMTP_FROM_EMAIL,
+                        "to": [normalized_email],
+                        "subject": message["Subject"],
+                        "text": message.get_content(),
+                    }).encode("utf-8"),
+                    headers={
+                        "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=20) as response:
+                    if response.status < 200 or response.status >= 300:
+                        raise RuntimeError(f"Resend returned HTTP {response.status}")
+            else:
+                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+                    if settings.SMTP_USE_TLS:
+                        server.starttls()
+                    if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
+                        server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+                    server.send_message(message)
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, smtplib.SMTPException, RuntimeError):
+            # Do not leave an unusable token active or expose provider/account details to callers.
             reset_record.is_used = True
             reset_record.used_at = datetime.now(timezone.utc)
             self.db.commit()
