@@ -292,14 +292,30 @@ def test_forgot_password_sends_single_use_reset_link_and_updates_password(
     assert new_login.status_code == status.HTTP_200_OK
 
 
-def test_forgot_password_does_not_disclose_unknown_email(client: TestClient) -> None:
-    """Unknown addresses receive the same public response without sending mail."""
-    response = client.post(
+def test_forgot_password_does_not_disclose_unknown_email(
+    client: TestClient,
+    test_patient_user: User,
+    monkeypatch,
+) -> None:
+    """Unconfigured email delivery returns the same public response for known and unknown addresses."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "RESEND_API_KEY", None)
+    monkeypatch.setattr(settings, "SMTP_HOST", None)
+    monkeypatch.setattr(settings, "SMTP_FROM_EMAIL", None)
+
+    unknown = client.post(
         "/api/v1/auth/forgot-password",
         json={"email": "not-registered@example.com"},
     )
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json()["detail"] == "If an account exists for that email, a password reset link will be sent shortly."
+    known = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "patient@example.com"},
+    )
+
+    assert unknown.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert known.status_code == unknown.status_code
+    assert unknown.json()["detail"] == known.json()["detail"]
 
 
 def test_password_reset_rejects_invalid_and_expired_tokens(client: TestClient) -> None:
