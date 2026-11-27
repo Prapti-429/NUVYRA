@@ -21,7 +21,7 @@ export const RegisterPage: React.FC = () => {
       password.length < 12 ||
       !/[A-Z]/.test(password) ||
       !/[a-z]/.test(password) ||
-      !/\\d/.test(password) ||
+      !/\d/.test(password) ||
       !/[!@#$%^&*(),.?":{}|<>]/.test(password)
     ) {
       setErrorMsg('Use at least 12 characters, including an uppercase letter, a lowercase letter, a number, and a special character.');
