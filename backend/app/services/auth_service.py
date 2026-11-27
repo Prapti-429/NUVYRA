@@ -246,7 +246,7 @@ class AuthenticationService:
         )
 
 
-    def request_password_reset(self, email: str, ip_address: Optional[str] = None) -> None:
+    def request_password_reset(self, email: str, ip_address: Optional[str] = None) -> bool:
         """Send a short-lived, single-use password reset link without revealing account existence."""
         resend_ready = bool(settings.RESEND_API_KEY and settings.SMTP_FROM_EMAIL)
         smtp_ready = bool(settings.SMTP_HOST and settings.SMTP_FROM_EMAIL)
@@ -255,12 +255,13 @@ class AuthenticationService:
                 "Password reset email is not configured. Set RESEND_API_KEY and SMTP_FROM_EMAIL "
                 "(recommended), or SMTP_HOST and SMTP_FROM_EMAIL."
             )
-            return
+            return False
 
         normalized_email = str(email).strip().lower()
         user = self.user_repo.get_by_email(normalized_email)
         if not user or not user.is_active:
-            return
+            # Keep the response identical for unknown and known addresses.
+            return True
 
         now = datetime.now(timezone.utc)
         recent = self.db.execute(
@@ -270,7 +271,8 @@ class AuthenticationService:
             ).order_by(PasswordResetToken.created_at.desc())
         ).scalars().first()
         if recent:
-            return
+            # A recent request already exists; do not create another token.
+            return True
 
         # Invalidate earlier links before issuing a new one.
         self.db.query(PasswordResetToken).filter(
@@ -329,12 +331,14 @@ class AuthenticationService:
                     if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
                         server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
                     server.send_message(message)
+            return True
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, smtplib.SMTPException, RuntimeError):
             # Do not leave an unusable token active or expose provider/account details to callers.
             reset_record.is_used = True
             reset_record.used_at = datetime.now(timezone.utc)
             self.db.commit()
             logger.exception("Unable to deliver NUVYRA password-reset email.")
+            return False
 
     def reset_password(self, raw_token: str, new_password: str) -> bool:
         """Replace a password using a valid, unexpired, single-use reset token."""

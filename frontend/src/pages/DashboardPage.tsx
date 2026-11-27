@@ -63,6 +63,7 @@ export const DashboardPage: React.FC = () => {
   const [latest, setLatest] = useState<AIAnalysisResponse | null>(null);
   const [history, setHistory] = useState<AIHistoryResponse | null>(null);
   const [rewards, setRewards] = useState<{ coins: number; streak: number; last_check_in_date?: string | null } | null>(null);
+  const [flippedGuideCard, setFlippedGuideCard] = useState<number | null>(null);
   useEffect(() => { let active = true; Promise.allSettled([aiService.latest(), aiService.history(30), apiClient.get('/past-history/rewards')]).then(([a,b,c]) => { if (!active) return; if (a.status === 'fulfilled') setLatest(a.value); if (b.status === 'fulfilled') setHistory(b.value); if (c.status === 'fulfilled') setRewards(c.value.data); }); return () => { active = false; }; }, []);
   const score = latest?.overall_score ?? 0;
   const trend = latest?.trend ?? 'INITIAL';
@@ -79,6 +80,67 @@ export const DashboardPage: React.FC = () => {
   const statusLabel = !latest ? 'Waiting for your first check-in' : trend === 'IMPROVING' ? 'Moving closer to usual' : trend === 'DEGRADING' ? 'Some changes noticed' : 'Close to usual';
   return <div className="space-y-8 pb-8">
     <div className="flex flex-col md:flex-row md:items-end justify-between gap-5"><div><p className="text-xs uppercase tracking-[0.2em] text-sky-400 font-semibold">Your NUVYRA space</p><h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white mt-2">Your pattern today ✦</h1><p className="text-slate-400 mt-2 max-w-2xl">A simple view of today's research measurements and what each number actually represents.</p></div><Link to="/check-in" className="inline-flex items-center justify-center bg-gradient-to-r from-sky-500 to-teal-500 text-slate-950 font-semibold px-5 py-3 rounded-2xl text-sm">Today's check-in →</Link></div>
+    <section aria-label="Explore NUVYRA features" className="space-y-4">
+      <div>
+        <p className="text-xs uppercase tracking-[0.18em] text-sky-400 font-semibold">Your navigation, at a glance</p>
+        <h2 className="text-xl sm:text-2xl font-bold text-white mt-1">Where would you like to go?</h2>
+        <p className="text-sm text-slate-400 mt-1">Tap a card to discover what each space does, then open it when you are ready.</p>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
+        {[
+          { title:'Daily Check-in', icon:'◉', description:'Record how you feel and, when you choose, add voice or camera observations.', to:'/check-in', accent:'text-sky-300' },
+          { title:'Biomarkers', icon:'⌁', description:'Explore the research signals collected during your completed check-ins.', to:'/biomarkers', accent:'text-teal-300' },
+          { title:'Trends', icon:'↗', description:'See how your recorded observations change across days and weeks.', to:'/trends', accent:'text-indigo-300' },
+          { title:'Timeline', icon:'◷', description:'Review completed check-ins in the order they happened.', to:'/timeline', accent:'text-cyan-300' },
+          { title:'Clinical View', icon:'▤', description:'Organize available observations and clinical context for review.', to:'/clinical-view', accent:'text-violet-300' },
+          { title:'Past History', icon:'▣', description:'Keep relevant history and uploaded documents together.', to:'/past-history', accent:'text-amber-300' },
+          { title:'Reports', icon:'▧', description:'View and export summaries of your longitudinal observations.', to:'/reports', accent:'text-emerald-300' },
+          { title:'Notifications', icon:'♧', description:'Check reminders and important updates from NUVYRA.', to:'/notifications', accent:'text-rose-300' },
+          { title:'Profile', icon:'◎', description:'Review your account details and session settings.', to:'/profile', accent:'text-blue-300' },
+          { title:'Dashboard', icon:'⌂', description:'Return to your personal overview and latest activity.', to:'/dashboard', accent:'text-sky-300' },
+        ].map((feature) => (
+          <div key={feature.title} className="group min-h-[178px] rounded-[1.6rem] border border-slate-800 bg-gradient-to-br from-[#172235] via-[#111827] to-slate-950 p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-sky-500/50 hover:shadow-xl hover:shadow-sky-950/20">
+            <div className="flex items-start justify-between gap-2">
+              <span className={`text-2xl ${feature.accent}`} aria-hidden="true">{feature.icon}</span>
+              <span className="text-[10px] uppercase tracking-wider text-slate-600">Explore</span>
+            </div>
+            <h3 className="mt-5 text-sm sm:text-base font-semibold text-white">{feature.title}</h3>
+            <p className="mt-2 text-xs leading-5 text-slate-400">{feature.description}</p>
+            <Link to={feature.to} className="inline-flex mt-4 text-xs font-semibold text-sky-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 rounded">Open {feature.title} <span aria-hidden="true" className="ml-1">→</span></Link>
+          </div>
+        ))}
+      </div>
+    </section>
+    <section aria-label="NUVYRA quick guide flashcards" className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-teal-300 font-semibold">A 30-second NUVYRA refresh</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-white mt-1">A few things worth knowing ✦</h2>
+          <p className="text-sm text-slate-400 mt-1">Tap a card to turn it over. A quick reminder whenever you sign in.</p>
+        </div>
+        <span className="text-xs text-slate-500">4 quick cards · tap to reveal</span>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { front:'What is NUVYRA looking for?', back:'Patterns and changes across repeated observations — not a diagnosis.' },
+          { front:'What is my personal baseline?', back:'A picture of your own usual pattern, built from repeated usable check-ins.' },
+          { front:'What can a check-in include?', back:'Your reported context and, when you choose, available voice and camera signals.' },
+          { front:'Can one unusual result tell me I am unwell?', back:'No. Individual readings can vary. Discuss health concerns with a qualified professional.' },
+        ].map((card, index) => (
+          <button
+            key={card.front}
+            type="button"
+            aria-pressed={flippedGuideCard === index}
+            onClick={() => setFlippedGuideCard(current => current === index ? null : index)}
+            className={`min-h-[150px] rounded-2xl border p-4 sm:p-5 text-left transition-all duration-200 hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 ${flippedGuideCard === index ? 'border-teal-400/50 bg-teal-400/10' : 'border-slate-800 bg-[#111827] hover:border-sky-500/40'}`}
+          >
+            <span className="text-[10px] uppercase tracking-[0.18em] text-sky-300">{flippedGuideCard === index ? 'The short answer' : `Quick card 0${index + 1}`}</span>
+            <span className="block mt-3 text-sm font-semibold leading-5 text-white">{flippedGuideCard === index ? card.back : card.front}</span>
+            <span className="block mt-4 text-[11px] text-slate-500">{flippedGuideCard === index ? 'Tap to turn back' : 'Tap to reveal ↗'}</span>
+          </button>
+        ))}
+      </div>
+    </section>
     <section className="rounded-3xl bg-gradient-to-br from-amber-500/10 via-[#111827] to-slate-950 border border-amber-400/20 p-6 sm:p-7 shadow-xl shadow-black/10"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5"><div><p className="text-xs uppercase tracking-[0.18em] text-amber-300 font-semibold">NUVYRA continuity rewards</p><h2 className="text-2xl font-bold text-white mt-1">Keep your monitoring streak going ✦</h2><p className="text-sm text-slate-400 mt-2 max-w-xl">Complete a NUVYRA daily check-in consistently to collect coins and build a streak. These rewards recognize participation only — they never depend on symptoms, scores, medicines, or test results.</p></div><div className="flex gap-3"><div className="min-w-[110px] rounded-2xl bg-slate-950 border border-slate-800 p-4 text-center"><div className="text-2xl">🪙</div><strong className="block text-2xl text-white mt-1">{rewards?.coins ?? 0}</strong><span className="text-[11px] text-slate-500">coins</span></div><div className="min-w-[110px] rounded-2xl bg-slate-950 border border-slate-800 p-4 text-center"><div className="text-2xl">🔥</div><strong className="block text-2xl text-white mt-1">{rewards?.streak ?? 0}</strong><span className="text-[11px] text-slate-500">day streak</span></div></div></div><div className="mt-4 text-xs text-slate-500">Daily check-in: +10 coins · Every 7-day streak milestone: +25 bonus coins</div></section>
     <div className="rounded-3xl bg-gradient-to-br from-sky-950/50 via-[#111b2d] to-[#0d1523] border border-sky-500/20 p-6 sm:p-8 shadow-xl"><div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4"><div><div className="flex items-center gap-2"><h2 className="text-xl font-semibold text-white">How familiar is today?</h2><Info title="Your personal pattern">NUVYRA learns your usual pattern from previous check-ins. There is no single universal healthy number that applies to everyone.</Info></div><p className="text-sm text-slate-400 mt-2">Your personal reference is more useful than a one-size-fits-all target.</p></div><StatusBadge status={latest ? status : 'neutral'} label={statusLabel} /></div><div className="mt-8 grid lg:grid-cols-3 gap-6 items-center"><div><div className="text-xs text-slate-500 uppercase tracking-wider">Experimental stability index</div><div className="text-6xl font-extrabold text-white mt-1">{latest ? Math.round(score) : '—'}</div><p className="text-xs text-slate-400 mt-2">A research index, not a medical score and not clinically validated.</p></div><div className="lg:col-span-2 rounded-2xl bg-black/20 border border-white/5 p-5"><div className="flex justify-between text-xs mb-3"><span className="text-slate-400">Your usual pattern</span><span className="text-slate-400">Today</span></div><div className="relative h-10 flex items-center"><div className="h-3 rounded-full bg-slate-700/80 w-full"/><div className="absolute left-[28%] right-[25%] h-5 rounded-full border border-sky-400/50 bg-sky-400/10"/><div className="absolute left-[62%] w-4 h-4 rounded-full bg-white shadow-lg"/></div><p className="text-xs text-slate-300 mt-4">{latest ? "Today's combined research pattern is shown against your learned personal reference." : 'Complete a check-in to begin learning your personal reference.'}</p></div></div></div>
     <section><div className="flex items-end justify-between mb-4"><div><h2 className="text-xl font-bold text-white">Your signals</h2><p className="text-sm text-slate-400 mt-1">Each card now shows the signal, exact research parameter, unit, today's value and your personal comparison.</p></div><Link to="/biomarkers" className="text-xs text-sky-400">Explore details →</Link></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{visibleCards.map((card,i)=><SignalCard key={`${card.signal}-${card.parameter}-${i}`} card={card}/>)}</div></section>
