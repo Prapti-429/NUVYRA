@@ -71,6 +71,29 @@ class AuthenticationService:
         )
         return user
 
+    def register_and_authenticate(
+        self,
+        payload: UserRegisterRequest,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> TokenResponse:
+        """
+        Register a new account or verify an existing account, then issue its
+        session in the same request and database session.
+
+        This avoids the frontend's previous two-request register-then-login
+        sequence, which could leave a successfully created account appearing
+        unusable if the follow-up request reached a differently configured
+        backend instance.
+        """
+        self.register_user(payload, ip_address=ip_address, user_agent=user_agent)
+        login_payload = LoginRequest(email=payload.email, password=payload.password)
+        return self.authenticate_user(
+            login_payload,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
     def authenticate_user(self, payload: LoginRequest, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> TokenResponse:
         normalized_email = str(payload.email).strip().lower()
         user = self.user_repo.get_by_email(normalized_email)
