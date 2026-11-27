@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { apiClient } from '../services/api';
+import { apiClient, systemApi } from '../services/api';
 
 export interface User {
   id: string;
@@ -64,7 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Warm the hosted API while the sign-in screen is being displayed.
         // This request never blocks the UI; it helps avoid making the user
         // wait for a sleeping backend only after pressing Sign In.
-        void apiClient.get('/health', { timeout: 45000 }).catch(() => undefined);
+        void systemApi.getHealth().catch(() => undefined);
         if (active) setIsLoading(false);
         return;
       }
