@@ -59,7 +59,7 @@ app.add_middleware(
     # hostname can differ from an older hard-coded hostname in the dashboard or
     # render.yaml. Allow HTTPS Render service origins while keeping arbitrary
     # origins and credentialed cross-site requests blocked.
-    allow_origin_regex=r"^https://[a-z0-9-]+\\.onrender\\.com$",
+    allow_origin_regex=r"^https://[a-z0-9-]+\.onrender\.com$",
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
