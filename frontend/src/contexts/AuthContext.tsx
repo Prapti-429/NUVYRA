@@ -57,22 +57,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    let active = true;
     const initAuth = async () => {
       const storedToken = localStorage.getItem('nuvyra_token');
-      if (storedToken) {
-        try {
-          const currentUser = await loadCurrentUser();
+      if (!storedToken) {
+        // Warm the hosted API while the sign-in screen is being displayed.
+        // This request never blocks the UI; it helps avoid making the user
+        // wait for a sleeping backend only after pressing Sign In.
+        void apiClient.get('/health', { timeout: 45000 }).catch(() => undefined);
+        if (active) setIsLoading(false);
+        return;
+      }
+
+      // Decode the signed-in identity locally so the app shell can render
+      // immediately. Verify and refresh the session in the background.
+      const cachedUser = decodeAccessTokenUser(storedToken);
+      if (cachedUser && active) {
+        setUser(cachedUser);
+        setToken(storedToken);
+      }
+      if (active) setIsLoading(false);
+
+      try {
+        const currentUser = await loadCurrentUser();
+        if (active) {
           setUser(currentUser);
+          setToken(localStorage.getItem('nuvyra_token') || storedToken);
+        }
+      } catch (error: any) {
+        if (error?.status === 401 || error?.code === 'HTTP_401') {
+          clearStoredAuth();
+          if (active) { setToken(null); setUser(null); }
+        } else if (active && !cachedUser) {
           setToken(storedToken);
-        } catch (error: any) {
-          if (error?.status === 401 || error?.code === 'HTTP_401') { clearStoredAuth(); setToken(null); setUser(null); }
-          else { setToken(storedToken); }
         }
       }
-      setIsLoading(false);
     };
 
-    initAuth();
+    void initAuth();
+    return () => { active = false; };
   }, []);
 
   const login = async (email: string, password: string) => {
