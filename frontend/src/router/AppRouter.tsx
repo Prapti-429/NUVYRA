@@ -20,6 +20,7 @@ const SettingsPage=lazy(()=>import('../pages/SettingsPage').then(m=>({default:m.
 const ProfilePage=lazy(()=>import('../pages/ProfilePage').then(m=>({default:m.ProfilePage})));
 const WelcomePage=lazy(()=>import('../components/NuvyraWelcome').then(m=>({default:m.default})));
 const LoginPage=lazy(()=>import('../pages/LoginPage').then(m=>({default:m.LoginPage})));
+const LoginFlashcardPage=lazy(()=>import('../pages/LoginFlashcard'));
 const RegisterPage=lazy(()=>import('../pages/RegisterPage').then(m=>({default:m.RegisterPage})));
 const ForgotPasswordPage=lazy(()=>import('../pages/ForgotPasswordPage').then(m=>({default:m.ForgotPasswordPage})));
 
@@ -47,6 +48,7 @@ const router=createBrowserRouter([
   {path:'/register',element:lazyElement(RegisterPage)},
   {path:'/forgot-password',element:lazyElement(ForgotPasswordPage)},
   {path:'/reset-password',element:lazyElement(ForgotPasswordPage)},
+  {path:'/login-flashcard',element:<ProtectedRoute>{lazyElement(LoginFlashcardPage)}</ProtectedRoute>},
   {element:<ProtectedRoute/>,children:[
     {path:'/welcome',element:<WelcomeRoute/>},
     {path:'/',element:<AppShell/>,children:[
