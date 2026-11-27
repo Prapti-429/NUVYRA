@@ -19,6 +19,7 @@ const ProfilePage=lazy(()=>import('../pages/ProfilePage').then(m=>({default:m.Pr
 const WelcomePage=lazy(()=>import('../components/NuvyraWelcome').then(m=>({default:m.default})));
 const LoginPage=lazy(()=>import('../pages/LoginPage').then(m=>({default:m.LoginPage})));
 const RegisterPage=lazy(()=>import('../pages/RegisterPage').then(m=>({default:m.RegisterPage})));
+const ForgotPasswordPage=lazy(()=>import('../pages/ForgotPasswordPage').then(m=>({default:m.ForgotPasswordPage})));
 
 const FallbackLoader=()=> <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 rounded-full border-2 border-sky-400 border-t-transparent animate-spin"/></div>;
 const lazyElement=(Component:React.LazyExoticComponent<React.ComponentType>)=><Suspense fallback={<FallbackLoader/>}><Component/></Suspense>;
@@ -29,6 +30,8 @@ const WelcomeRoute: React.FC = () => { const navigate = useNavigate(); const { u
 const router=createBrowserRouter([
   {path:'/login',element:lazyElement(LoginPage)},
   {path:'/register',element:lazyElement(RegisterPage)},
+  {path:'/forgot-password',element:lazyElement(ForgotPasswordPage)},
+  {path:'/reset-password',element:lazyElement(ForgotPasswordPage)},
   {element:<ProtectedRoute/>,children:[
     {path:'/welcome',element:<WelcomeRoute/>},
     {path:'/',element:<AppShell/>,children:[
