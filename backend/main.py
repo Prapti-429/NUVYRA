@@ -54,11 +54,16 @@ allowed_origins = [
 ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    # Render assigns a hostname per service. The frontend's actual *.onrender.com
-    # hostname can differ from an older hard-coded hostname in the dashboard or
-    # render.yaml. Allow HTTPS Render service origins while keeping arbitrary
-    # origins and credentialed cross-site requests blocked.
+    # Capacitor's Android WebView uses http://localhost as its app origin.
+    # The hosted website has a separate *.onrender.com origin, so both must be
+    # allowed for the native wrapper to call the same HTTPS API.
+    allow_origins=allowed_origins + [
+        "http://localhost",
+        "https://localhost",
+        "capacitor://localhost",
+    ],
+    # Allow HTTPS Render service origins while keeping arbitrary origins and
+    # credentialed cross-site requests blocked.
     allow_origin_regex=r"^https://[a-z0-9-]+\.onrender\.com$",
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
