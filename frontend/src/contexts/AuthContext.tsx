@@ -105,18 +105,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (email: string, password: string, fullName?: string) => {
-    const response = await apiClient.post('/auth/register', {
-      email,
+    const normalizedEmail = email.trim().toLowerCase();
+    const response = await apiClient.post('/auth/register-session', {
+      email: normalizedEmail,
       password,
       full_name: fullName,
     });
+    const { access_token, refresh_token, user: authenticatedUser } = response.data || {};
 
-    const registeredUser = response.data as User;
-    if (!registeredUser?.id) {
-      throw new Error('Account was created but the server returned an invalid user record.');
+    if (!access_token || !authenticatedUser?.id) {
+      throw new Error('The server did not complete account registration and sign-in. Please try again.');
     }
 
-    await login(email, password);
+    localStorage.setItem('nuvyra_token', access_token);
+    localStorage.setItem('access_token', access_token);
+    if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
+    setToken(access_token);
+    setUser(authenticatedUser as User);
   };
 
   const logout = () => {
