@@ -6,7 +6,7 @@ logout, and current identity verification.
 """
 
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 try:
@@ -29,6 +29,8 @@ from app.schemas.auth_schemas import (
     RefreshTokenRequest,
     TokenResponse,
     UserRegisterRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
 )
 from app.schemas.user_schemas import UserRead
 
@@ -92,6 +94,47 @@ def login(
     """Verifies user credentials and issues Access and Refresh tokens."""
     auth_service = AuthenticationService(db, jwt_engine)
     return auth_service.authenticate_user(payload, ip_address=ip_address, user_agent=user_agent)
+
+
+
+@router.post(
+    "/forgot-password",
+    status_code=status.HTTP_200_OK,
+    summary="Request a password reset email",
+)
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: Annotated[Session, Depends(get_db)],
+    jwt_engine: Annotated[JWTEngine, Depends(get_jwt_engine)],
+    ip_address: Annotated[Optional[str], Depends(get_client_ip)] = None,
+) -> dict[str, str]:
+    """Always return the same message to avoid disclosing whether an email is registered."""
+    AuthenticationService(db, jwt_engine).request_password_reset(
+        str(payload.email), ip_address=ip_address
+    )
+    return {"detail": "If an account exists for that email, a password reset link will be sent shortly."}
+
+
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_200_OK,
+    summary="Set a new password using a single-use reset token",
+)
+def reset_password(
+    payload: ResetPasswordRequest,
+    db: Annotated[Session, Depends(get_db)],
+    jwt_engine: Annotated[JWTEngine, Depends(get_jwt_engine)],
+) -> dict[str, str]:
+    """Validate the reset token, replace the password, and revoke existing sessions."""
+    success = AuthenticationService(db, jwt_engine).reset_password(
+        payload.token, payload.new_password
+    )
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This password reset link is invalid or has expired. Please request a new one.",
+        )
+    return {"detail": "Your password has been reset. Please sign in with your new password."}
 
 
 @router.post(
