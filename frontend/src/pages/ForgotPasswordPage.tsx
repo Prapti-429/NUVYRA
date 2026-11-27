@@ -42,7 +42,7 @@ export const ForgotPasswordPage: React.FC = () => {
         setMessage(response.data?.detail || 'Your password has been reset. Please sign in.');
       } else {
         const response = await apiClient.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
-        setMessage(response.data?.detail || 'If an account exists for that email, a reset link will be sent shortly.');
+        setMessage(response.data?.detail || 'If an account exists and email delivery is available, a reset link will be sent shortly. Check your spam folder if it does not arrive.');
       }
     } catch (requestError: any) {
       setError(requestError?.response?.data?.detail || requestError?.message || 'We could not complete this request. Please try again.');
