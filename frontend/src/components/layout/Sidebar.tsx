@@ -27,7 +27,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
   return <>
     <aside className="w-64 flex-shrink-0 bg-[#0E1524] border-r border-slate-800/80 flex flex-col justify-between h-screen sticky top-0">
       <div className="p-6"><NuvyraLogo size="md"/><div className="mt-8 space-y-1">
-        <p className="px-3 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">{t.intelligence}</p>
+        <p className="px-3 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">{role === 'patient' ? 'NUVYRA Personal' : role === 'administrator' ? 'NUVYRA Partner / Clinical' : 'NUVYRA Clinical'}</p>
         {navigation.map(item => <NavLink key={item.key} to={item.href} onClick={onCloseMobile} className={({isActive})=>`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium ${isActive?'bg-sky-500/10 text-sky-400 border border-sky-500/20':'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}><span>{t[item.key]}</span></NavLink>)}
       </div></div>
       <div className="p-4 border-t border-slate-800/60 bg-[#0B101D] space-y-2">
