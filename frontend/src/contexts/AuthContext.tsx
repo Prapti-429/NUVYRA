@@ -57,22 +57,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const initAuth = async () => {
-      const storedToken = localStorage.getItem('nuvyra_token');
-      if (storedToken) {
-        try {
-          const currentUser = await loadCurrentUser();
-          setUser(currentUser);
-          setToken(storedToken);
-        } catch (error: any) {
-          if (error?.status === 401 || error?.code === 'HTTP_401') { clearStoredAuth(); setToken(null); setUser(null); }
-          else { setToken(storedToken); }
-        }
-      }
+    const storedToken = localStorage.getItem('nuvyra_token') || localStorage.getItem('access_token');
+    if (!storedToken) {
       setIsLoading(false);
-    };
+      return;
+    }
 
-    initAuth();
+    // Restore the minimum identity immediately from the signed token so a
+    // slow /auth/me round-trip does not hold the entire Android app behind a
+    // full-screen spinner. The server profile replaces this cached identity
+    // as soon as it is available.
+    setToken(storedToken);
+    const cachedUser = decodeAccessTokenUser(storedToken);
+    if (cachedUser) setUser(cachedUser);
+    setIsLoading(false);
+
+    let active = true;
+    loadCurrentUser()
+      .then((currentUser) => {
+        if (active) setUser(currentUser);
+      })
+      .catch((error: any) => {
+        if (error?.status === 401 || error?.code === 'HTTP_401') {
+          clearStoredAuth();
+          if (active) {
+            setToken(null);
+            setUser(null);
+          }
+        }
+        // A temporary network failure must not block app entry. The next API
+        // request can retry once connectivity is restored.
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
