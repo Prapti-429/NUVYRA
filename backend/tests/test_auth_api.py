@@ -231,3 +231,17 @@ def test_rbac_admin_endpoint_forbidden_for_patient(client: TestClient, test_pati
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+def test_render_frontend_origin_passes_cors_preflight(client: TestClient) -> None:
+    """Render-hosted frontends must be able to send JSON auth requests."""
+    response = client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "https://digital-biomarker-monitor.onrender.com",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.headers.get("access-control-allow-origin") == "https://digital-biomarker-monitor.onrender.com"
+    assert "POST" in response.headers.get("access-control-allow-methods", "")
