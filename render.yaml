@@ -18,6 +18,8 @@ services:
         value: production
       - key: FRONTEND_URL
         value: https://digital-biomarker-monitor.onrender.com
+      - key: RESEND_API_KEY
+        sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
