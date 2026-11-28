@@ -60,8 +60,11 @@ async function getVoice(blob:Blob):Promise<Voice>{
   let frames=0,active=0,pitchSum=0,pitchN=0;
   for(let s=0;s+frame<d.length;s+=hop){let e=0;for(let j=0;j<frame;j++)e+=d[s+j]**2;const fr=Math.sqrt(e/frame);frames++;if(fr>Math.max(rms*.35,.01)){active++;const minLag=Math.floor(audio.sampleRate/400),maxLag=Math.min(Math.floor(audio.sampleRate/70),frame-1);let best=0,bestC=-Infinity;for(let lag=minLag;lag<=maxLag;lag++){let c=0;for(let j=0;j<frame-lag;j+=4)c+=d[s+j]*d[s+j+lag];if(c>bestC){bestC=c;best=lag;}}const p=best?audio.sampleRate/best:0;if(p>=70&&p<=400){pitchSum+=p;pitchN++;}}}
   const speechActivity=frames?active/frames:0;
-  const durationScore=clamp(audio.duration/15,0,1),speechScore=clamp((speechActivity-.05)/.45,0,1),levelScore=clamp(1-Math.abs(rms-.08)/.08,0,1);
-  const qualityScore=Math.round((durationScore*.2+speechScore*.6+levelScore*.2)*100);
+  // Technical capture gate; microphone hardware has different normal output levels.
+  const durationScore=clamp(audio.duration/18,0,1);
+  const speechScore=clamp(speechActivity/.55,0,1);
+  const levelScore=clamp((rms-.003)/.025,0,1);
+  const qualityScore=Math.round((durationScore*.35+speechScore*.45+levelScore*.20)*100);
   return{rms:Number(rms.toFixed(6)),zcr:Number(Math.min(1,zcr).toFixed(6)),pitch:Number((pitchN?pitchSum/pitchN:0).toFixed(2)),speechActivity:Number(speechActivity.toFixed(4)),duration:audio.duration,qualityScore};
  }finally{await ctx.close();}
 }
@@ -97,7 +100,7 @@ export const CheckInResearchPage:React.FC=()=>{
    const mimeCandidates=['audio/webm;codecs=opus','audio/webm','audio/mp4'];
    const mime=mimeCandidates.find(type=>MediaRecorder.isTypeSupported(type));
    const r=new MediaRecorder(stream,mime?{mimeType:mime}:undefined),chunks:Blob[]=[];r.ondataavailable=e=>e.data.size&&chunks.push(e.data);
-   r.onstop=async()=>{try{const v=await getVoice(new Blob(chunks,{type:mime}));if(v.duration<10||v.qualityScore<80){setError(`Voice recording quality is ${v.qualityScore}%. NUVYRA requires at least 80% to continue. Please record again: use a quiet room, keep the microphone about 15–20 cm away, speak clearly at your usual pace, and read the full prompt. This score checks recording conditions only, not your health.`);setVoice(null);}else setVoice(v);}catch{setError('Voice analysis failed. Please record the sample again.');}finally{stream.getTracks().forEach(t=>t.stop());streamRef.current=null;setRecording(false);}};
+   r.onstop=async()=>{try{const v=await getVoice(new Blob(chunks,{type:mime}));if(v.duration<15||v.speechActivity<.25||v.rms<.004||v.qualityScore<80){setError(`Voice recording quality is ${v.qualityScore}%. NUVYRA requires at least 80% to continue. Please record again: use a quiet room, keep the microphone about 15–20 cm away, speak clearly at your usual pace, and read the full prompt. This score checks recording conditions only, not your health.`);setVoice(null);}else setVoice(v);}catch{setError('Voice analysis failed. Please record the sample again.');}finally{stream.getTracks().forEach(t=>t.stop());streamRef.current=null;setRecording(false);}};
    r.start(250);setRecording(true);const started=performance.now();const timer=window.setInterval(()=>{const left=Math.max(0,Math.ceil(20-(performance.now()-started)/1000));setSeconds(left);if(!left)window.clearInterval(timer);},250);
    window.setTimeout(()=>{window.clearInterval(timer);if(r.state!=='inactive')r.stop();},20000);
   }catch(e){streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setError(e instanceof Error?e.message:'Microphone could not be started. Check app permissions and try again.');setRecording(false);}
@@ -115,10 +118,13 @@ export const CheckInResearchPage:React.FC=()=>{
     for(let i=0;i<p.length;i+=4){const v=.2126*p[i]+.7152*p[i+1]+.0722*p[i+2];total+=v;if(prev)diff+=Math.abs(v-(.2126*prev[i]+.7152*prev[i+1]+.0722*prev[i+2]));}
     motion.push(diff/(160*120*255));lum.push(total/(160*120*255));prev=new Uint8ClampedArray(p);await new Promise(r=>setTimeout(r,200));
    }
-   const avgLum=mean(lum),motionVariability=sd(motion);
-   const lightingScore=clamp(1-Math.abs(avgLum-.45)/.45,0,1),stabilityScore=clamp(1-motionVariability/.12,0,1);
-   const qualityScore=Math.round((lightingScore*.5+stabilityScore*.5)*100);
-   if(qualityScore<80)throw Error(`Camera recording quality is ${qualityScore}%. NUVYRA requires at least 80% to continue. Please try again: face a soft light source, avoid a bright window behind you, place the camera at eye level, keep your face and shoulders centered, and steady the phone. This score checks lighting and image stability only; it does not assess your health or verify head position.`);
+   const avgLum=mean(lum);
+   if(lum.length<30)throw Error('Camera capture was too short or unstable. Please keep the camera preview open and try again.');
+   // Use a broad acceptable brightness range; do not penalize ordinary well-lit rooms.
+   const lightingScore=avgLum>=.18&&avgLum<=.85?1:avgLum<.18?clamp(avgLum/.18,0,1):clamp((1-avgLum)/.15,0,1);
+   const stabilityScore=clamp(1-mean(motion)/.12,0,1);
+   const qualityScore=Math.round((lightingScore*.55+stabilityScore*.45)*100);
+   if(qualityScore<80)throw Error(`Camera recording quality is ${qualityScore}%. NUVYRA requires at least 80% to continue. Improve the lighting with a soft light in front of you, keep the phone steady, centre yourself in the preview, and record again. This is a technical image-capture check only; it does not assess your health.`);
    const out:Camera={quality_score:qualityScore};
    setCamera(out);
   }catch(e:any){setError(e?.message||'Camera analysis failed. Please check camera permission and try again.');}
@@ -128,8 +134,8 @@ export const CheckInResearchPage:React.FC=()=>{
  const validateSurvey=()=>{if(!mood||moodLevel<1||energy<1||fatigue<1||sleep<1||concentration<1||stress<1){setError('Please answer every required 1–5 check-in field before continuing.');return false;}if(sleepHours<0||awakenings<0){setError('Please enter valid sleep hours and awakenings.');return false;}setError('');return true;};
  const analyze=async()=>{
   setError('');
-  if(!voice){setError('Voice analysis is missing. Please record a usable voice sample before continuing.');setStep(2);return;}
-  if(!camera){setError('Camera analysis is missing. Please complete the camera check before continuing.');setStep(3);return;}
+  if(!voice||voice.qualityScore<80||voice.duration<15||voice.speechActivity<.25||voice.rms<.004){setVoice(null);setCamera(null);setError('The voice sample has not passed every technical quality requirement (80% minimum, sufficient duration, speech activity and signal level). Please record it again before using the camera step.');setStep(2);return;}
+  if(!camera||camera.quality_score<80){setCamera(null);setError('The camera sample has not passed the 80% technical quality requirement. Please repeat the camera check.');setStep(3);return;}
   setLoading(true);
   try{setResult(await aiService.analyze({fatigue,energy_level:energy,sleep_quality:sleep, sleep_hours:sleepHours,sleep_awakenings:awakenings,stress_level:stress,concentration_level:concentration,physical_comfort:PHYSICAL_INDEX[physical]||1,physical_comfort_observation:physical,physical_comfort_notes:physicalNotes,mood_level:moodLevel,mood_deviation:moodMap[mood]??0,symptom_burden:observations.length/6,voice_language:language,voice_rms:voice.rms,voice_zero_crossing_rate:voice.zcr,voice_pitch_hz:voice.pitch,voice_speech_activity:voice.speechActivity,source_duration_seconds:voice.duration}));}
   catch(e:any){if(e?.status===401)navigate('/login');else setError(e?.message||'NUVYRA analysis failed. Please try the check-in again.');}
@@ -160,7 +166,7 @@ export const CheckInResearchPage:React.FC=()=>{
    <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 text-sm leading-6 text-slate-300"><strong className="text-white">Listen first, then follow each instruction</strong><button type="button" onClick={voiceGuidance} className="ml-3 rounded-lg border border-slate-700 px-3 py-1 text-xs text-sky-300">Play voice instructions</button><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Move to a quiet room and pause music, television, or nearby conversations.</li><li>Keep the phone still, with its microphone about 15–20 cm from your mouth. Do not cover the microphone.</li><li>Read the prompt shown above in the selected language. Speak in your everyday voice, at a comfortable pace and volume.</li><li>Use complete natural sentences for the full recording. Do not whisper, shout, imitate an accent, or force your pitch.</li><li>If you stumble, simply continue naturally. You can record again if you prefer.</li></ol><p className="mt-2 text-xs text-slate-400">The 80% threshold is a technical audio-capture gate only. It is not speech accuracy, clinical accuracy, or a health score. If the sample is rejected, the camera step stays locked until a new voice sample passes.</p></div>
    <button type="button" disabled={recording} onClick={record} className="mx-auto block rounded-xl bg-sky-500 px-6 py-3 font-semibold text-slate-950 disabled:opacity-50">{recording?`Recording… ${seconds}s`:voice?'Voice sample captured':'Record 20-second sample'}</button>
    {voice&&<div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-center text-xs text-slate-400">{[['Recording quality',`${voice.qualityScore}%`],['Duration',`${voice.duration.toFixed(1)} s`],['Pitch estimate',`${voice.pitch.toFixed(0)} Hz`],['Speech activity',`${Math.round(voice.speechActivity*100)}%`],['Sound level',voice.rms.toFixed(4)]].map(([k,v])=><div key={String(k)} className="rounded-xl bg-slate-900 p-3"><b className="block text-white">{v}</b><span>{k}</span></div>)}</div>}
-   <button type="button" disabled={!voice} onClick={()=>setStep(3)} className="w-full rounded-xl bg-teal-500 py-3 font-semibold text-slate-950 disabled:opacity-40">Continue to camera</button>
+   <button type="button" disabled={!voice||voice.qualityScore<80||voice.duration<15||voice.speechActivity<.25||voice.rms<.004} onClick={()=>{if(voice&&voice.qualityScore>=80&&voice.duration>=15&&voice.speechActivity>=.25&&voice.rms>=.004)setStep(3);else{setVoice(null);setError("Voice sample did not meet every quality requirement. Please record again.");}}} className="w-full rounded-xl bg-teal-500 py-3 font-semibold text-slate-950 disabled:opacity-40">Continue to camera</button>
   </section>}
 
   {step===3&&<section className="rounded-2xl border border-slate-800 bg-[#111827] p-6 space-y-6">
@@ -168,7 +174,7 @@ export const CheckInResearchPage:React.FC=()=>{
    <video ref={videoRef} muted playsInline className="mx-auto aspect-video w-full max-w-md rounded-xl bg-black object-cover scale-x-[-1]"/><canvas ref={canvasRef} className="hidden"/>
    <button type="button" disabled={capturing} onClick={capture} className="mx-auto block rounded-xl bg-teal-500 px-6 py-3 font-semibold text-slate-950 disabled:opacity-50">{capturing?'Checking camera…':camera?'Camera sample captured':'Start 10-second camera check'}</button>
    {camera&&<div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><div className="text-xs text-slate-400">Camera recording quality</div><div className="mt-1 text-2xl font-semibold text-emerald-300">{camera.quality_score}%</div><p className="mt-1 text-xs text-slate-400">Passed the 80% lighting-and-stability threshold. This is not a health or diagnostic confidence score.</p></div>}
-   <button type="button" disabled={!camera} onClick={()=>setStep(4)} className="w-full rounded-xl bg-sky-500 py-3 font-semibold text-slate-950 disabled:opacity-40">Review check-in</button>
+   <button type="button" disabled={!camera||camera.quality_score<80} onClick={()=>{if(camera&&camera.quality_score>=80)setStep(4);else{setCamera(null);setError("Camera sample did not meet the 80% quality requirement. Please record again.");}}} className="w-full rounded-xl bg-sky-500 py-3 font-semibold text-slate-950 disabled:opacity-40">Review check-in</button>
   </section>}
 
   {step===4&&<section className="rounded-2xl border border-slate-800 bg-[#111827] p-6 space-y-6">
