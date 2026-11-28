@@ -75,7 +75,7 @@ export const ClinicalViewPage: React.FC = () => {
 
   const baselineReady = observationCount >= 5;
   const modalityRows = useMemo(() => [
-    ['Daily check-in answers', present.includes('survey'), 'Self-reported mood, fatigue, energy, sleep, stress, concentration and physical comfort', 'Answers entered by the user'],
+    ['Daily check-in answers', present.includes('survey'), 'Self-reported fatigue, energy, sleep quality, stress and concentration', 'Answers entered by the user'],
   ], [present]);
 
   return (
@@ -89,7 +89,7 @@ export const ClinicalViewPage: React.FC = () => {
           </div>
           <button type="button" onClick={() => setShowGuide(v => !v)} className="shrink-0 rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:border-sky-500/40">{showGuide ? 'Hide interpretation guide' : 'How to read this view'}</button>
         </div>
-        {showGuide && <div className="mt-5 grid md:grid-cols-4 gap-3 text-xs"><div className="rounded-xl bg-slate-950/50 border border-slate-800 p-4"><b className="text-white">Observed</b><p className="text-slate-400 mt-1">The computational or reported quantity actually recorded.</p></div><div className="rounded-xl bg-slate-950/50 border border-slate-800 p-4"><b className="text-white">How</b><p className="text-slate-400 mt-1">The sensor, task or data source used to obtain it.</p></div><div className="rounded-xl bg-slate-950/50 border border-slate-800 p-4"><b className="text-white">Factors</b><p className="text-slate-400 mt-1">Conditions that can change the measurement without representing disease.</p></div><div className="rounded-xl bg-slate-950/50 border border-slate-800 p-4"><b className="text-white">Meaning</b><p className="text-slate-400 mt-1">The appropriate longitudinal interpretation—not a diagnosis.</p></div></div>}
+        {showGuide && <div className="mt-5 grid md:grid-cols-4 gap-3 text-xs"><div className="rounded-xl bg-slate-950/50 border border-slate-800 p-4"><b className="text-white">Observed</b><p className="text-slate-400 mt-1">The computational or reported quantity actually recorded.</p></div><div className="rounded-xl bg-slate-950/50 border border-slate-800 p-4"><b className="text-white">How</b><p className="text-slate-400 mt-1">The question or source used to record it.</p></div><div className="rounded-xl bg-slate-950/50 border border-slate-800 p-4"><b className="text-white">Factors</b><p className="text-slate-400 mt-1">Conditions that can change the measurement without representing disease.</p></div><div className="rounded-xl bg-slate-950/50 border border-slate-800 p-4"><b className="text-white">Meaning</b><p className="text-slate-400 mt-1">The appropriate longitudinal interpretation—not a diagnosis.</p></div></div>}
       </div>
 
       {error && <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">{error} The page will still show the full interpretation framework and any available research analysis.</div>}
@@ -107,7 +107,7 @@ export const ClinicalViewPage: React.FC = () => {
         <div className="rounded-2xl border border-slate-800 bg-[#111827] p-5"><span className="text-[10px] uppercase text-slate-500">Baseline observations</span><p className="text-3xl font-bold text-white mt-1">{observationCount || '—'}</p><p className="text-xs text-slate-500 mt-1">Repeated observations available</p></div>
       </div>
 
-      <Section title="What was observed and how" subtitle="Only the daily check-in answers contribute to the current personal-pattern index. Audio and video measurements are not collected in the standard check-in.">
+      <Section title="What was observed and how" subtitle="Only five self-reported daily reflections contribute to the current experimental personal-pattern index. Audio and video measurements are not collected or scored.">
         <div className="overflow-x-auto"><table className="w-full text-left min-w-[760px]"><thead><tr className="border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-500"><th className="pb-3 pr-4">Modality</th><th className="pb-3 pr-4">Status</th><th className="pb-3 pr-4">Observed information</th><th className="pb-3">Acquisition</th></tr></thead><tbody>{modalityRows.map(([name, ok, observed, acquisition]) => <tr key={String(name)} className="border-b border-slate-800/60"><td className="py-4 pr-4 text-sm font-medium text-white">{name}</td><td className="py-4 pr-4"><StatusBadge status={ok ? 'stable' : 'neutral'} label={ok ? 'Available' : 'Not available'} size="sm" /></td><td className="py-4 pr-4 text-xs text-slate-300">{observed}</td><td className="py-4 text-xs text-slate-500">{acquisition}</td></tr>)}</tbody></table></div>
         {missing.length > 0 && <p className="mt-4 text-xs text-amber-300">Missing modalities in the latest analysis: {missing.join(', ')}. Missing data reduces interpretability and should not be treated as a normal result.</p>}
       </Section>
