@@ -264,12 +264,11 @@ class AIService:
         limitations.append("The numerical personal-pattern index uses five self-reported 1–5 ratings only: fatigue, energy, sleep quality, stress and concentration.")
         limitations.append("Overall feeling and physical-comfort choices are kept as context and are not converted into numeric index inputs.")
         limitations.append("Voice and camera measurements are not collected in the standard check-in and are not used in the index.")
-        limitations.append("Camera-derived face, eye, head, gait and breathing measurements are excluded because validated measurement methods are not enabled.")
         if context.document_count:
             limitations.append("Uploaded records and extracted document summaries are shown as background context; their laboratory values are not yet incorporated into the numerical pattern score.")
         now = datetime.now(timezone.utc)
         description = 'broadly consistent' if score >= 80 else 'moderately different' if score >= 60 else 'substantially different'
-        explanation = f"The current session is {description} from the personal baseline. The system used {len(modalities)} available signal groups, excluded unavailable or invalid values, and checked whether notable differences persist across recent observations. Persistence: {persistence}. This is an observational research signal, not a diagnosis."
+        explanation = f"The five self-reported answers in this check-in are {description} from the personal baseline. NUVYRA compares these answers with earlier check-ins and looks for changes that appear repeatedly over time. Persistence: {persistence}. This is an experimental personal comparison, not a diagnosis or a measure of medical accuracy."
         check_in = DailyCheckIn(user_id=user_id, check_in_date=date.today(), status="completed", completed_at=now, extra_metadata={"source":"self_report_daily_check_in","model_version":MODEL_VERSION,"quality":quality,"missing_modalities":missing,"persistence":persistence})
         self.db.add(check_in)
         self.db.flush()
