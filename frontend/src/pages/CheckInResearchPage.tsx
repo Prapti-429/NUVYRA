@@ -41,7 +41,7 @@ function mediaAccessError(error:unknown,kind:'microphone'|'camera'):string{
 }
 
 async function requestMedia(kind:'microphone'|'camera',constraints:MediaStreamConstraints):Promise<MediaStream>{
- if(!window.isSecureContext)throw new Error(mediaAccessError(new Error('Insecure context'),'microphone'));
+ if(!window.isSecureContext)throw new Error(mediaAccessError(new Error('Insecure context'),kind));
  if(!navigator.mediaDevices?.getUserMedia)throw new Error(mediaAccessError(new Error('getUserMedia unavailable'),kind));
  try{return await navigator.mediaDevices.getUserMedia(constraints);}
  catch(error){throw new Error(mediaAccessError(error,kind));}
