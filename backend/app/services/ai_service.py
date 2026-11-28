@@ -123,6 +123,21 @@ class AIService:
         present = sum(1 for name in REQUIRED_SCORE_FIELDS if name in current)
         return round(present / len(REQUIRED_SCORE_FIELDS), 3)
 
+    def _invalid_required_ranges(self, current: Dict[str, float]) -> Dict[str, float]:
+        ranges = {
+            "fatigue": (1.0, 5.0),
+            "energy_level": (1.0, 5.0),
+            "sleep_quality": (1.0, 5.0),
+            "stress_level": (1.0, 5.0),
+            "concentration_level": (1.0, 5.0),
+            "physical_comfort": (1.0, 7.0),
+        }
+        return {
+            name: current[name]
+            for name, (minimum, maximum) in ranges.items()
+            if name in current and not minimum <= current[name] <= maximum
+        }
+
     def _model_score(self, current: Dict[str, float], history_features: List[Dict[str, float]]):
         deviations = self._robust_deviations(current, history_features)
         n = len(history_features)
@@ -212,6 +227,15 @@ class AIService:
     def analyze(self, user_id: UUID, payload: AIAnalysisRequest) -> AIAnalysisResponse:
         current = self._vector(payload)
         quality = self._quality(current, payload)
+        invalid_ranges = self._invalid_required_ranges(current)
+        if invalid_ranges:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "Some answers are outside the allowed range. Please review the highlighted values.",
+                    "invalid_fields": invalid_ranges,
+                },
+            )
         if quality < 1.0:
             missing_fields = [name for name in REQUIRED_SCORE_FIELDS if name not in current]
             raise HTTPException(
