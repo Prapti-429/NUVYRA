@@ -29,48 +29,49 @@ def test_invalid_numeric_values_are_rejected() -> None:
 
 def test_missing_modalities_are_not_imputed() -> None:
     engine = service()
-    current = {"voice_pitch_hz": 180.0, "voice_rms": 0.2}
+    current = {"energy_level": 180.0, "voice_rms": 0.2}
     modalities = engine._modalities(current)
     missing = engine._missing(modalities)
 
-    assert modalities == ["voice"]
-    assert "voice" not in missing
-    assert set(missing) == set(MODALITY_NAMES) - {"voice"}
+    # Voice and camera proxies are intentionally not active score modalities.
+    assert modalities == []
+    assert set(missing) == set(MODALITY_NAMES)
 
 
-def test_quality_is_bounded_and_duration_aware() -> None:
+def test_required_self_report_completeness_is_bounded() -> None:
     engine = service()
     payload = SimpleNamespace(source_duration_seconds=20)
     current = {name: 1.0 for name, _ in FEATURES}
-    quality = engine._quality(current, payload)
+    complete = engine._quality(current, payload)
+    incomplete = engine._quality({k: v for k, v in current.items() if k != "energy_level"}, payload)
 
-    assert 0.0 <= quality <= 1.0
-    assert quality > 0.5
+    assert complete == 1.0
+    assert 0.0 <= incomplete < 1.0
 
 
 def test_persistence_requires_history() -> None:
     engine = service()
-    deviations = {"voice_pitch_hz": 2.0}
+    deviations = {"energy_level": 2.0}
     assert engine._persistence(deviations, []) == "INSUFFICIENT_HISTORY"
     assert engine._persistence(deviations, [None, None]) == "INSUFFICIENT_HISTORY"
 
 
 def test_persistent_change_requires_repeated_deviation() -> None:
     engine = service()
-    deviations = {"voice_pitch_hz": 2.0}
+    deviations = {"energy_level": 2.0}
     # Most-recent first. The same feature is meaningfully away from its
     # personal center in at least two of the last three usable sessions.
     history = [
-        (None, None, {"voice_pitch_hz": 120.0}),
-        (None, None, {"voice_pitch_hz": 118.0}),
-        (None, None, {"voice_pitch_hz": 100.0}),
-        (None, None, {"voice_pitch_hz": 99.0}),
-        (None, None, {"voice_pitch_hz": 101.0}),
+        (None, None, {"energy_level": 120.0}),
+        (None, None, {"energy_level": 118.0}),
+        (None, None, {"energy_level": 100.0}),
+        (None, None, {"energy_level": 99.0}),
+        (None, None, {"energy_level": 101.0}),
     ]
     assert engine._persistence(deviations, history) == "PERSISTENT_CHANGE"
 
 
 def test_no_deviation_is_not_reported_as_persistent() -> None:
     engine = service()
-    history = [(None, None, {"voice_pitch_hz": 100.0}) for _ in range(5)]
+    history = [(None, None, {"energy_level": 100.0}) for _ in range(5)]
     assert engine._persistence({}, history) == "NO_PERSISTENT_DEVIATION"
