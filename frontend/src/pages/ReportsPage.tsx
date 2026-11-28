@@ -4,9 +4,9 @@ import { useLanguage, AppLanguage } from '../contexts/LanguageContext';
 
 type ReportDefinition={key:string;title:string;description:string;fileName:string;observations:number};
 const REPORTS:ReportDefinition[]=[
- {key:'weekly',title:'Weekly Longitudinal Summary',description:'Your most recent 7 usable observations.',fileName:'nuvyra-weekly-longitudinal-report.csv',observations:7},
+ {key:'weekly',title:'Weekly Check-in Summary',description:'Your most recent 7 completed check-ins.',fileName:'nuvyra-weekly-longitudinal-report.csv',observations:7},
  {key:'monthly',title:'Monthly Personal Pattern Summary',description:'Your most recent 30 usable check-ins.',fileName:'nuvyra-monthly-multimodal-report.csv',observations:30},
- {key:'baseline',title:'Baseline Calibration Benchmark',description:'Up to 90 observations for personal-baseline and trajectory review.',fileName:'nuvyra-baseline-trajectory-report.csv',observations:90},
+ {key:'baseline',title:'90-day Personal History',description:'Up to 90 completed check-ins for a longer-term view.',fileName:'nuvyra-baseline-trajectory-report.csv',observations:90},
 ];
 
 const COPY:Record<AppLanguage,Record<string,string>>={
@@ -16,9 +16,9 @@ const COPY:Record<AppLanguage,Record<string,string>>={
 };
 
 const csvCell=(value:unknown)=>{const text=value==null?'':String(value);return '"'+text.replace(/"/g,'""')+'"';};
-const buildCsv=(title:string,points:AIHistoryPoint[],language:AppLanguage)=>{
+const buildCsv=(title:string,points:AIHistoryPoint[],language:AppLanguage,baselineReady:boolean)=>{
  const notice=language==='Hindi'?'केवल रिसर्च/अवलोकन सारांश; निदान या चिकित्सीय रिपोर्ट नहीं।':language==='French'?'Résumé de recherche/observation uniquement ; pas un diagnostic ni un rapport médical.':'Research/observational summary only; not a diagnosis or medical report.';
- const rows=[['NUVYRA Longitudinal Report',title],['Generated',new Date().toISOString()],['Notice',notice],[],['Check-in ID','Generated at','Personal pattern score','Trend'],...points.map(p=>[p.check_in_id,p.generated_at,Number(p.score).toFixed(2),p.trend])];
+ const rows=[['NUVYRA Longitudinal Report',title],['Generated',new Date().toISOString()],['Notice',notice],[],['Check-in ID','Generated at','Personal pattern index (shown after 5 check-ins)','Trend'],...points.map(p=>[p.check_in_id,p.generated_at,baselineReady?Number(p.score).toFixed(2):'',p.trend])];
  return rows.map(row=>row.map(csvCell).join(',')).join('\r\n');
 };
 const triggerDownload=(csv:string,fileName:string)=>{
@@ -61,7 +61,7 @@ export const ReportsPage:React.FC=()=>{
  const score=latest?Number(latest.score):0;
  const baselineReady=(latestAnalysis?.baseline_observations??0)>=5;
  const delta=latest&&first?score-Number(first.score):0;
- const download=()=>{setDownloading(report.key);setError(null);try{if(!points.length)throw new Error(t.empty);triggerDownload(buildCsv(report.title,points,language),report.fileName)}catch(e:any){setError(e?.message||t.error)}finally{window.setTimeout(()=>setDownloading(null),400)}};
+ const download=()=>{setDownloading(report.key);setError(null);try{if(!points.length)throw new Error(t.empty);triggerDownload(buildCsv(report.title,points,language,baselineReady),report.fileName)}catch(e:any){setError(e?.message||t.error)}finally{window.setTimeout(()=>setDownloading(null),400)}};
  return <div className="space-y-7 max-w-6xl">
   <style>{'@media (prefers-reduced-motion: reduce){.nuvyra-report-line{animation:none!important;stroke-dashoffset:0!important}.nuvyra-report-card{animation:none!important}} .nuvyra-report-line{stroke-dasharray:1;stroke-dashoffset:1;animation:nuvyraDraw 1.4s ease-out forwards} @keyframes nuvyraDraw{to{stroke-dashoffset:0}} .nuvyra-report-card{animation:nuvyraRise .45s ease-out both} @keyframes nuvyraRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}'}</style>
   <header className="nuvyra-report-card"><p className="text-[11px] uppercase tracking-[0.18em] text-sky-400">NUVYRA · Longitudinal view</p><h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white mt-2">{t.title}</h1><p className="text-slate-400 text-sm mt-2 max-w-3xl leading-6">{t.subtitle}</p></header>
@@ -77,7 +77,7 @@ export const ReportsPage:React.FC=()=>{
    </section>
    <section className="rounded-2xl border border-slate-800 bg-[#111827] p-5">
     <h2 className="text-sm font-semibold text-white">What was analyzed from your saved history</h2>
-    <p className="text-xs text-slate-400 mt-2 leading-5">This report keeps the distinction between information saved from your documents and signals collected during NUVYRA check-ins. Document findings are context for longitudinal review; they are not silently converted into a diagnosis or score.</p>
+    <p className="text-xs text-slate-400 mt-2 leading-5">This report keeps your check-in answers separate from information extracted from uploaded documents. Document summaries are background context; they do not change the personal pattern index.</p>
     {latestAnalysis?.context ? <div className="mt-4 space-y-4">
       <div className="grid sm:grid-cols-3 gap-3">
         <div className="rounded-xl bg-slate-950/50 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-600">Saved history</p><p className="text-sm text-slate-200 mt-2">{latestAnalysis.context.past_history_count} record{latestAnalysis.context.past_history_count===1?'':'s'}</p></div>
