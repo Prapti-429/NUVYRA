@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { NuvyraLogo } from './common/NuvyraLogo';
 
 type Flashcard = { question: string; answer: string; hint: string };
 const DECK: Record<string, Flashcard[]> = {
@@ -50,7 +51,7 @@ export default function NuvyraDailyFlashcard({ onComplete }: { onComplete: () =>
   return (
     <main className="min-h-screen bg-[#080D17] text-white flex items-center justify-center px-5 py-10">
       <div className="w-full max-w-2xl">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-8"><NuvyraLogo size="sm" />
           <span className="text-[11px] tracking-[.22em] text-sky-300">{ui.eyebrow}</span>
           <span className="text-xs text-slate-500">{index + 1} / {deck.length}</span>
         </div>
