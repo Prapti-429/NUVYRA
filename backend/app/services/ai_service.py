@@ -212,7 +212,7 @@ class AIService:
     def analyze(self, user_id: UUID, payload: AIAnalysisRequest) -> AIAnalysisResponse:
         current = self._vector(payload)
         quality = self._quality(current, payload)
-        if quality < 0.80:
+        if quality < 1.0:
             missing_fields = [name for name in REQUIRED_SCORE_FIELDS if name not in current]
             raise HTTPException(
                 status_code=422,
@@ -220,7 +220,7 @@ class AIService:
                     "message": "This check-in is incomplete and was not saved. Please complete the required questions and try again.",
                     "missing_fields": missing_fields,
                     "data_completeness": quality,
-                    "minimum_required": 0.80,
+                    "minimum_required": 1.0,
                 },
             )
         history = [row for row in self._history(user_id) if (row[1].model_metadata or {}).get('model_version') == MODEL_VERSION]
