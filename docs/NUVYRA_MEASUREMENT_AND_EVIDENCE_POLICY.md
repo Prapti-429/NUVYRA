@@ -13,6 +13,10 @@ NUVYRA must distinguish four different things:
 
 These are not interchangeable. An 80% capture-quality score is not 80% measurement accuracy, diagnostic accuracy, or clinical confidence. Do not label a heuristic score as accuracy, confidence, or probability.
 
+## Check-in acceptance rule
+
+The five core self-reported reflections are fatigue, energy, sleep quality, stress and concentration. A check-in may be saved when at least four of these five fields are supplied with values inside their allowed ranges. This is an 80% **field-completeness** threshold only. It cannot establish that a person's answer is true, that a signal is accurate, or that any clinical interpretation is correct. Missing fields are excluded from the feature vector; they are never filled with an assumed normal value. Optional mood and physical-comfort context must not be guessed or made a barrier to completing the check-in.
+
 ## Current product boundary
 
 - The current personal-pattern analysis uses self-reported check-in fields only.
