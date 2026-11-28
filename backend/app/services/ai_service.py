@@ -27,7 +27,7 @@ MODEL_VERSION = "2.5.0"
 # ignored by this model and are not collected in the standard daily check-in.
 FEATURES = (("fatigue", "survey"), ("energy_level", "survey"), ("sleep_quality", "survey"), ("stress_level", "survey"), ("concentration_level", "survey"))
 MODALITY_NAMES = ["survey"]
-REQUIRED_CHECKIN_FIELDS = ("fatigue", "mood_deviation", "energy_level", "sleep_quality", "stress_level", "concentration_level", "physical_comfort")
+REQUIRED_CHECKIN_FIELDS = ("fatigue", "energy_level", "sleep_quality", "stress_level", "concentration_level")
 
 class AIService:
     def __init__(self, db: Session) -> None:
@@ -205,8 +205,8 @@ class AIService:
 
     def _recommendations(self, score, trend, quality, missing, context, persistence):
         out = ["Complete check-ins regularly and answer based on your actual experience; one session should not be interpreted in isolation."]
-        if quality < 0.6:
-            out.append("Some required answers are incomplete. Complete every required question before submitting.")
+        if quality < 1.0:
+            out.append("One core reflection was not supplied and was excluded from the personal-pattern calculation.")
         if missing:
             out.append("Missing signal groups were excluded from the analysis; they were not treated as normal.")
         if persistence == "PERSISTENT_CHANGE":
@@ -222,8 +222,8 @@ class AIService:
             out.append("Your personal reference pattern is still developing; comparisons are limited until more usable check-ins are collected.")
         if missing:
             out.append("Unavailable modalities were excluded rather than imputed as normal.")
-        if quality < 0.6:
-            out.append("Today's data quality was limited, so interpretation should be treated cautiously.")
+        if quality < 1.0:
+            out.append("One core reflection was not supplied and was excluded; completeness is not an accuracy or clinical-confidence measure.")
         return out
 
     def analyze(self, user_id: UUID, payload: AIAnalysisRequest) -> AIAnalysisResponse:
@@ -238,15 +238,15 @@ class AIService:
                     "invalid_fields": invalid_ranges,
                 },
             )
-        if quality < 1.0:
+        if quality < 0.8:
             missing_fields = [name for name in REQUIRED_CHECKIN_FIELDS if getattr(payload, name, None) is None]
             raise HTTPException(
                 status_code=422,
                 detail={
-                    "message": "This check-in is incomplete and was not saved. Please complete the required questions and try again.",
+                    "message": "This check-in was not saved because fewer than 4 of the 5 core reflections were supplied. Please answer at least four and try again.",
                     "missing_fields": missing_fields,
                     "data_completeness": quality,
-                    "minimum_required": 1.0,
+                    "minimum_required": 0.8,
                 },
             )
         history = [row for row in self._history(user_id) if (row[1].model_metadata or {}).get('model_version') == MODEL_VERSION]
