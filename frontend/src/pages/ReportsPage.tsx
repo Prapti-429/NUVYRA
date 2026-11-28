@@ -57,10 +57,9 @@ export const ReportsPage:React.FC=()=>{
  const sorted=useMemo(()=>[...history].sort((a,b)=>new Date(a.generated_at).getTime()-new Date(b.generated_at).getTime()),[history]);
  const report=REPORTS.find(r=>r.key===selected)||REPORTS[1];
  const points=sorted.slice(-report.observations);
- const latest=points[points.length-1],first=points[0];
+ const latest=points[points.length-1];
  const score=latest?Number(latest.score):0;
  const baselineReady=(latestAnalysis?.baseline_observations??0)>=5;
- const delta=latest&&first?score-Number(first.score):0;
  const download=()=>{setDownloading(report.key);setError(null);try{if(!points.length)throw new Error(t.empty);triggerDownload(buildCsv(report.title,points,language,baselineReady),report.fileName)}catch(e:any){setError(e?.message||t.error)}finally{window.setTimeout(()=>setDownloading(null),400)}};
  return <div className="space-y-7 max-w-6xl">
   <style>{'@media (prefers-reduced-motion: reduce){.nuvyra-report-line{animation:none!important;stroke-dashoffset:0!important}.nuvyra-report-card{animation:none!important}} .nuvyra-report-line{stroke-dasharray:1;stroke-dashoffset:1;animation:nuvyraDraw 1.4s ease-out forwards} @keyframes nuvyraDraw{to{stroke-dashoffset:0}} .nuvyra-report-card{animation:nuvyraRise .45s ease-out both} @keyframes nuvyraRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}'}</style>
