@@ -1,9 +1,9 @@
 """Self-reported personal-pattern analysis service.
 
 Observational monitoring only. This service never diagnoses disease or makes
-clinical/treatment decisions. Up to five core 1–5 self-report ratings enter
-the experimental index; at least four are required and missing values are
-excluded. Categorical answers remain context only.
+clinical/treatment decisions. Five core 1–5 self-report ratings enter
+the experimental index; all five are required before a check-in is saved.
+Categorical answers remain context only.
 """
 from __future__ import annotations
 from datetime import date, datetime, timezone
@@ -22,8 +22,8 @@ from app.db.models.user import User
 from app.schemas.ai_schemas import AIAnalysisRequest, AIAnalysisResponse, AIHistoryPoint, AIHistoryResponse, AIContextSummary, BiomarkerFeatureRead
 
 MODEL_NAME = "NUVYRA Personal Pattern Engine"
-MODEL_VERSION = "2.5.0"
-# Up to five self-reported 1–5 ratings contribute to the current personal-pattern index.
+MODEL_VERSION = "2.6.0"
+# All five self-reported 1–5 ratings are required for a completed personal-pattern check-in.
 # Categorical answers remain context only. Legacy voice/camera payload fields are
 # ignored by this model and are not collected in the standard daily check-in.
 FEATURES = (("fatigue", "survey"), ("energy_level", "survey"), ("sleep_quality", "survey"), ("stress_level", "survey"), ("concentration_level", "survey"))
@@ -120,7 +120,7 @@ class AIService:
         return out
 
     def _quality(self, current: Dict[str, float], payload: AIAnalysisRequest) -> float:
-        # Completeness of required self-report fields, not clinical accuracy.
+        # Completeness of required self-report fields, never clinical accuracy.
         present = sum(1 for name in REQUIRED_CHECKIN_FIELDS if getattr(payload, name, None) is not None)
         return round(present / len(REQUIRED_CHECKIN_FIELDS), 3)
 
@@ -224,7 +224,7 @@ class AIService:
         if missing:
             out.append("Unavailable modalities were excluded rather than imputed as normal.")
         if quality < 1.0:
-            out.append("One core reflection was not supplied and was excluded; completeness is not an accuracy or clinical-confidence measure.")
+            out.append("All five required reflections must be supplied before a check-in can be saved. Completeness is not an accuracy or clinical-confidence measure.")
         return out
 
     def analyze(self, user_id: UUID, payload: AIAnalysisRequest) -> AIAnalysisResponse:
@@ -239,15 +239,15 @@ class AIService:
                     "invalid_fields": invalid_ranges,
                 },
             )
-        if quality < 0.8:
+        if quality < 1.0:
             missing_fields = [name for name in REQUIRED_CHECKIN_FIELDS if getattr(payload, name, None) is None]
             raise HTTPException(
                 status_code=422,
                 detail={
-                    "message": "This check-in was not saved because fewer than 4 of the 5 core reflections were supplied. Please answer at least four and try again.",
+                    "message": "This check-in was not saved because all five core reflections are required. Please complete every field with an answer that reflects your experience.",
                     "missing_fields": missing_fields,
                     "data_completeness": quality,
-                    "minimum_required": 0.8,
+                    "minimum_required": 1.0,
                 },
             )
         history = [row for row in self._history(user_id) if (row[1].model_metadata or {}).get('model_version') == MODEL_VERSION]
@@ -270,7 +270,7 @@ class AIService:
         now = datetime.now(timezone.utc)
         description = 'broadly consistent' if score >= 80 else 'moderately different' if score >= 60 else 'substantially different'
         explanation = f"The current session is {description} from the personal baseline. The system used {len(modalities)} available signal groups, excluded unavailable or invalid values, and checked whether notable differences persist across recent observations. Persistence: {persistence}. This is an observational research signal, not a diagnosis."
-        check_in = DailyCheckIn(user_id=user_id, check_in_date=date.today(), status="completed", completed_at=now, extra_metadata={"source":"web_multimodal_check_in","model_version":MODEL_VERSION,"quality":quality,"missing_modalities":missing,"persistence":persistence})
+        check_in = DailyCheckIn(user_id=user_id, check_in_date=date.today(), status="completed", completed_at=now, extra_metadata={"source":"self_report_daily_check_in","model_version":MODEL_VERSION,"quality":quality,"missing_modalities":missing,"persistence":persistence})
         self.db.add(check_in)
         self.db.flush()
         feature_reads = []
