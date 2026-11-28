@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 from app.db.models.biomarker_feature import BiomarkerFeature
 from app.db.models.daily_check_in import DailyCheckIn
 from app.db.models.health_stability_score import HealthStabilityScore
@@ -21,8 +22,12 @@ from app.schemas.ai_schemas import AIAnalysisRequest, AIAnalysisResponse, AIHist
 
 MODEL_NAME = "Nuvyra Multimodal Longitudinal Biomarker Engine"
 MODEL_VERSION = "2.3.0"
-FEATURES = (("fatigue", "survey"), ("mood_deviation", "survey"), ("symptom_burden", "survey"), ("energy_level", "survey"), ("sleep_quality", "survey"), ("stress_level", "survey"), ("concentration_level", "survey"), ("physical_comfort", "survey"), ("appetite_level", "survey"), ("voice_rms", "voice"), ("voice_zero_crossing_rate", "voice"), ("voice_pitch_hz", "voice"), ("voice_speech_activity", "voice"), ("voice_speech_rate", "voice"), ("voice_pause_ratio", "voice"), ("face_motion", "facial_dynamics"), ("face_luminance_variability", "facial_dynamics"), ("face_blink_proxy", "eye"), ("blink_rate_per_minute", "eye"), ("eye_opening_proxy", "eye"), ("gait_motion", "gait_movement"), ("gait_variability", "gait_movement"), ("gait_symmetry_proxy", "gait_movement"), ("breathing_rate_per_minute", "breathing"), ("breathing_variability", "breathing"), ("head_motion", "head_movement"), ("head_motion_variability", "head_movement"))
-MODALITY_NAMES = ["survey", "voice", "facial_dynamics", "eye", "gait_movement", "breathing", "head_movement"]
+# Only self-reported fields currently contribute to the personal-pattern score.
+# Voice is used only for technical capture checks in the client. Camera-derived
+# face, eye, head, gait and breathing estimates are excluded until validated.
+FEATURES = (("fatigue", "survey"), ("mood_deviation", "survey"), ("symptom_burden", "survey"), ("energy_level", "survey"), ("sleep_quality", "survey"), ("stress_level", "survey"), ("concentration_level", "survey"), ("physical_comfort", "survey"))
+MODALITY_NAMES = ["survey"]
+REQUIRED_SCORE_FIELDS = ("fatigue", "mood_deviation", "energy_level", "sleep_quality", "stress_level", "concentration_level", "physical_comfort")
 
 class AIService:
     def __init__(self, db: Session) -> None:
@@ -114,13 +119,9 @@ class AIService:
         return out
 
     def _quality(self, current: Dict[str, float], payload: AIAnalysisRequest) -> float:
-        if not current:
-            return 0.0
-        present_modalities = len(self._modalities(current))
-        modality_coverage = present_modalities / len(MODALITY_NAMES)
-        finite_ratio = len(current) / len(FEATURES)
-        duration_quality = min(1.0, max(0.0, float(payload.source_duration_seconds or 0)) / 20.0)
-        return round(min(1.0, 0.50*modality_coverage + 0.30*min(1, finite_ratio*3) + 0.20*duration_quality), 3)
+        # Completeness of required self-report fields, not clinical accuracy.
+        present = sum(1 for name in REQUIRED_SCORE_FIELDS if name in current)
+        return round(present / len(REQUIRED_SCORE_FIELDS), 3)
 
     def _model_score(self, current: Dict[str, float], history_features: List[Dict[str, float]]):
         deviations = self._robust_deviations(current, history_features)
@@ -210,6 +211,18 @@ class AIService:
 
     def analyze(self, user_id: UUID, payload: AIAnalysisRequest) -> AIAnalysisResponse:
         current = self._vector(payload)
+        quality = self._quality(current, payload)
+        if quality < 0.80:
+            missing_fields = [name for name in REQUIRED_SCORE_FIELDS if name not in current]
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "This check-in is incomplete and was not saved. Please complete the required questions and try again.",
+                    "missing_fields": missing_fields,
+                    "data_completeness": quality,
+                    "minimum_required": 0.80,
+                },
+            )
         history = self._history(user_id)
         context = self._context(user_id)
         score, algorithm, confidence, deviations = self._model_score(current, [r[2] for r in history])
@@ -217,11 +230,14 @@ class AIService:
         trend = self._trend(score, previous)
         modalities = self._modalities(current)
         missing = self._missing(modalities)
-        quality = self._quality(current, payload)
         persistence = self._persistence(deviations, history)
         drivers = self._drivers(deviations)
         recommendations = self._recommendations(score, trend, quality, missing, context, persistence)
         limitations = self._limitations(len(history), missing, quality)
+        limitations.append("The numerical pattern score currently uses self-reported check-in answers only. Voice recordings are not treated as medical evidence.")
+        limitations.append("Camera-derived face, eye, head, gait and breathing measurements are excluded because validated measurement methods are not enabled.")
+        if context.document_count:
+            limitations.append("Uploaded records and extracted document summaries are shown as background context; their laboratory values are not yet incorporated into the numerical pattern score.")
         now = datetime.now(timezone.utc)
         description = 'broadly consistent' if score >= 80 else 'moderately different' if score >= 60 else 'substantially different'
         explanation = f"The current session is {description} from the personal baseline. The system used {len(modalities)} available signal groups, excluded unavailable or invalid values, and checked whether notable differences persist across recent observations. Persistence: {persistence}. This is an observational research signal, not a diagnosis."
