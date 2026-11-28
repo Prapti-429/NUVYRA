@@ -22,9 +22,9 @@ from app.schemas.ai_schemas import AIAnalysisRequest, AIAnalysisResponse, AIHist
 
 MODEL_NAME = "NUVYRA Personal Pattern Engine"
 MODEL_VERSION = "2.5.0"
-# Only self-reported fields currently contribute to the personal-pattern score.
-# Voice is used only for technical capture checks in the client. Camera-derived
-# face, eye, head, gait and breathing estimates are excluded until validated.
+# Only five self-reported 1–5 ratings contribute to the current personal-pattern index.
+# Categorical answers remain context only. Legacy voice/camera payload fields are
+# ignored by this model and are not collected in the standard daily check-in.
 FEATURES = (("fatigue", "survey"), ("energy_level", "survey"), ("sleep_quality", "survey"), ("stress_level", "survey"), ("concentration_level", "survey"))
 MODALITY_NAMES = ["survey"]
 REQUIRED_CHECKIN_FIELDS = ("fatigue", "mood_deviation", "energy_level", "sleep_quality", "stress_level", "concentration_level", "physical_comfort")
