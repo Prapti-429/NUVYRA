@@ -109,10 +109,15 @@ def forgot_password(
     ip_address: Annotated[Optional[str], Depends(get_client_ip)] = None,
 ) -> dict[str, str]:
     """Always return the same message to avoid disclosing whether an email is registered."""
-    AuthenticationService(db, jwt_engine).request_password_reset(
+    sent_or_account_hidden = AuthenticationService(db, jwt_engine).request_password_reset(
         str(payload.email), ip_address=ip_address
     )
-    return {"detail": "If an account exists for that email, a password reset link will be sent shortly."}
+    if not sent_or_account_hidden:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset email is temporarily unavailable. Please try again later.",
+        )
+    return {"detail": "If an account exists for that email, a password reset link will be sent shortly. Check your inbox and spam folder."}
 
 
 @router.post(
