@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../services/api';
 import { NuvyraLogo } from '../components/common/NuvyraLogo';
+import { warmBackend } from '../services/api';
 
 export const ForgotPasswordPage: React.FC = () => {
   const [params] = useSearchParams();
@@ -13,6 +14,8 @@ export const ForgotPasswordPage: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => { void warmBackend(); }, []);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setMessage('');
@@ -23,6 +26,10 @@ export const ForgotPasswordPage: React.FC = () => {
     }
     if (token && password.length < 12) {
       setError('Your new password must contain at least 12 characters.');
+      return;
+    }
+    if (token && (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\\d/.test(password) || !/[!@#$%^&*(),.?":{}|<>]/.test(password))) {
+      setError('Use uppercase and lowercase letters, a number and a special character.');
       return;
     }
 
