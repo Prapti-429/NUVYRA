@@ -52,17 +52,19 @@ def test_required_self_report_completeness_is_bounded() -> None:
     engine = service()
     current = {name: 3.0 for name, _ in FEATURES}
     required = {
-        "fatigue": 3.0, "mood_deviation": 0.0, "energy_level": 3.0,
-        "sleep_quality": 3.0, "stress_level": 3.0,
-        "concentration_level": 3.0, "physical_comfort": 1.0,
+        "fatigue": 3.0, "energy_level": 3.0, "sleep_quality": 3.0,
+        "stress_level": 3.0, "concentration_level": 3.0,
     }
     complete_payload = SimpleNamespace(**required)
-    incomplete_payload = SimpleNamespace(**{k: v for k, v in required.items() if k != "energy_level"})
+    four_of_five_payload = SimpleNamespace(**{k: v for k, v in required.items() if k != "energy_level"})
+    three_of_five_payload = SimpleNamespace(**{k: v for k, v in required.items() if k not in {"energy_level", "stress_level"}})
     complete = engine._quality(current, complete_payload)
-    incomplete = engine._quality(current, incomplete_payload)
+    four_of_five = engine._quality(current, four_of_five_payload)
+    three_of_five = engine._quality(current, three_of_five_payload)
 
     assert complete == 1.0
-    assert 0.0 <= incomplete < 1.0
+    assert four_of_five == 0.8
+    assert three_of_five == 0.6
 
 
 def test_persistence_requires_history() -> None:
