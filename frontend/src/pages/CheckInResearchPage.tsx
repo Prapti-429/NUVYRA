@@ -55,7 +55,6 @@ export const CheckInResearchPage: React.FC = () => {
 
   const physicalLabels = PHYSICAL[language] || PHYSICAL.English;
   const observationLabels = OBS[language] || OBS.English;
-  const physicalIndex = PHYSICAL_OPTIONS_EN.indexOf(physical);
 
   const toggleObservation = (item: string) => {
     setObservations(current => current.includes(item) ? current.filter(value => value !== item) : [...current, item]);
