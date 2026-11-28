@@ -1,8 +1,9 @@
-"""Longitudinal multimodal research inference service.
+"""Self-reported personal-pattern analysis service.
 
 Observational monitoring only. This service never diagnoses disease or makes
-clinical/treatment decisions. Missing and low-quality signals are excluded
-rather than silently converted into normal values.
+clinical/treatment decisions. Five core 1–5 self-report ratings enter
+the experimental index; all five are required before a check-in is saved.
+Categorical answers remain context only.
 """
 from __future__ import annotations
 from datetime import date, datetime, timezone
@@ -12,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 from app.db.models.biomarker_feature import BiomarkerFeature
 from app.db.models.daily_check_in import DailyCheckIn
 from app.db.models.health_stability_score import HealthStabilityScore
@@ -19,10 +21,14 @@ from app.db.models.past_history import HealthReminder, MedicalDocument, PastHist
 from app.db.models.user import User
 from app.schemas.ai_schemas import AIAnalysisRequest, AIAnalysisResponse, AIHistoryPoint, AIHistoryResponse, AIContextSummary, BiomarkerFeatureRead
 
-MODEL_NAME = "Nuvyra Multimodal Longitudinal Biomarker Engine"
-MODEL_VERSION = "2.3.0"
-FEATURES = (("fatigue", "survey"), ("mood_deviation", "survey"), ("symptom_burden", "survey"), ("energy_level", "survey"), ("sleep_quality", "survey"), ("stress_level", "survey"), ("concentration_level", "survey"), ("physical_comfort", "survey"), ("appetite_level", "survey"), ("voice_rms", "voice"), ("voice_zero_crossing_rate", "voice"), ("voice_pitch_hz", "voice"), ("voice_speech_activity", "voice"), ("voice_speech_rate", "voice"), ("voice_pause_ratio", "voice"), ("face_motion", "facial_dynamics"), ("face_luminance_variability", "facial_dynamics"), ("face_blink_proxy", "eye"), ("blink_rate_per_minute", "eye"), ("eye_opening_proxy", "eye"), ("gait_motion", "gait_movement"), ("gait_variability", "gait_movement"), ("gait_symmetry_proxy", "gait_movement"), ("breathing_rate_per_minute", "breathing"), ("breathing_variability", "breathing"), ("head_motion", "head_movement"), ("head_motion_variability", "head_movement"))
-MODALITY_NAMES = ["survey", "voice", "facial_dynamics", "eye", "gait_movement", "breathing", "head_movement"]
+MODEL_NAME = "NUVYRA Personal Pattern Engine"
+MODEL_VERSION = "2.6.0"
+# All five self-reported 1–5 ratings are required for a completed personal-pattern check-in.
+# Categorical answers remain context only. Legacy voice/camera payload fields are
+# ignored by this model and are not collected in the standard daily check-in.
+FEATURES = (("fatigue", "survey"), ("energy_level", "survey"), ("sleep_quality", "survey"), ("stress_level", "survey"), ("concentration_level", "survey"))
+MODALITY_NAMES = ["survey"]
+REQUIRED_CHECKIN_FIELDS = ("fatigue", "energy_level", "sleep_quality", "stress_level", "concentration_level")
 
 class AIService:
     def __init__(self, db: Session) -> None:
@@ -85,6 +91,8 @@ class AIService:
                     "dates": list(analysis.get("dates_found") or [])[:20],
                     "follow_up_mentions": list(ai.get("follow_up_mentions") or [])[:20],
                     "summary": str(ai.get("summary") or "")[:500],
+                    # Only user-confirmed rows enter report context; candidates remain excluded.
+                    "confirmed_lab_results": list(analysis.get("confirmed_lab_results") or [])[:100],
                 })
         if pending:
             used.append("pending document/test reminders")
@@ -114,13 +122,26 @@ class AIService:
         return out
 
     def _quality(self, current: Dict[str, float], payload: AIAnalysisRequest) -> float:
-        if not current:
-            return 0.0
-        present_modalities = len(self._modalities(current))
-        modality_coverage = present_modalities / len(MODALITY_NAMES)
-        finite_ratio = len(current) / len(FEATURES)
-        duration_quality = min(1.0, max(0.0, float(payload.source_duration_seconds or 0)) / 20.0)
-        return round(min(1.0, 0.50*modality_coverage + 0.30*min(1, finite_ratio*3) + 0.20*duration_quality), 3)
+        # Completeness of required self-report fields, never clinical accuracy.
+        present = sum(1 for name in REQUIRED_CHECKIN_FIELDS if getattr(payload, name, None) is not None)
+        return round(present / len(REQUIRED_CHECKIN_FIELDS), 3)
+
+    def _invalid_required_ranges(self, payload: AIAnalysisRequest) -> Dict[str, float]:
+        ranges = {
+            "fatigue": (1.0, 5.0),
+            "mood_deviation": (0.0, 1.0),
+            "energy_level": (1.0, 5.0),
+            "sleep_quality": (1.0, 5.0),
+            "stress_level": (1.0, 5.0),
+            "concentration_level": (1.0, 5.0),
+            "physical_comfort": (1.0, 7.0),
+        }
+        return {
+            name: float(getattr(payload, name))
+            for name, (minimum, maximum) in ranges.items()
+            if getattr(payload, name, None) is not None
+            and not minimum <= float(getattr(payload, name)) <= maximum
+        }
 
     def _model_score(self, current: Dict[str, float], history_features: List[Dict[str, float]]):
         deviations = self._robust_deviations(current, history_features)
@@ -186,9 +207,9 @@ class AIService:
         return [n.replace("_", " ") for n, v in sorted(deviations.items(), key=lambda x: x[1], reverse=True)[:4] if v >= 1]
 
     def _recommendations(self, score, trend, quality, missing, context, persistence):
-        out = ["Repeat check-ins under reasonably similar conditions; one session should not be interpreted in isolation."]
-        if quality < 0.6:
-            out.append("Today's information is limited or noisy. A cleaner recording or additional signal groups may improve the next check-in.")
+        out = ["Complete check-ins regularly and answer based on your actual experience; one session should not be interpreted in isolation."]
+        if quality < 1.0:
+            out.append("One core reflection was not supplied and was excluded from the personal-pattern calculation.")
         if missing:
             out.append("Missing signal groups were excluded from the analysis; they were not treated as normal.")
         if persistence == "PERSISTENT_CHANGE":
@@ -199,33 +220,58 @@ class AIService:
 
     @staticmethod
     def _limitations(history_count, missing, quality):
-        out = ["Observational research system only; this output is not a diagnosis or treatment recommendation.", "Camera and microphone estimates can be affected by lighting, device position, background noise, language and recording conditions.", "The stability index is experimental and has not been clinically validated."]
+        out = ["Observational system only; this output is not a diagnosis or treatment recommendation.", "Self-reported answers can be affected by recall, expectations, interpretation of rating scales and temporary circumstances.", "The personal-pattern index is experimental and has not been clinically validated."]
         if history_count < 5:
-            out.append("Your personal baseline is still developing; confidence is limited until more usable observations are collected.")
+            out.append("Your personal reference pattern is still developing; comparisons are limited until more usable check-ins are collected.")
         if missing:
             out.append("Unavailable modalities were excluded rather than imputed as normal.")
-        if quality < 0.6:
-            out.append("Today's data quality was limited, so interpretation should be treated cautiously.")
+        if quality < 1.0:
+            out.append("All five required reflections must be supplied before a check-in can be saved. Completeness is not an accuracy or clinical-confidence measure.")
         return out
 
     def analyze(self, user_id: UUID, payload: AIAnalysisRequest) -> AIAnalysisResponse:
         current = self._vector(payload)
-        history = self._history(user_id)
+        quality = self._quality(current, payload)
+        invalid_ranges = self._invalid_required_ranges(payload)
+        if invalid_ranges:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "Some answers are outside the allowed range. Please review the highlighted values.",
+                    "invalid_fields": invalid_ranges,
+                },
+            )
+        if quality < 1.0:
+            missing_fields = [name for name in REQUIRED_CHECKIN_FIELDS if getattr(payload, name, None) is None]
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "This check-in was not saved because all five core reflections are required. Please complete every field with an answer that reflects your experience.",
+                    "missing_fields": missing_fields,
+                    "data_completeness": quality,
+                    "minimum_required": 1.0,
+                },
+            )
+        history = [row for row in self._history(user_id) if (row[1].model_metadata or {}).get('model_version') == MODEL_VERSION]
         context = self._context(user_id)
         score, algorithm, confidence, deviations = self._model_score(current, [r[2] for r in history])
         previous = history[0][1].overall_score if history else None
         trend = self._trend(score, previous)
         modalities = self._modalities(current)
         missing = self._missing(modalities)
-        quality = self._quality(current, payload)
         persistence = self._persistence(deviations, history)
         drivers = self._drivers(deviations)
         recommendations = self._recommendations(score, trend, quality, missing, context, persistence)
         limitations = self._limitations(len(history), missing, quality)
+        limitations.append("The numerical personal-pattern index uses five self-reported 1–5 ratings only: fatigue, energy, sleep quality, stress and concentration.")
+        limitations.append("Overall feeling and physical-comfort choices are kept as context and are not converted into numeric index inputs.")
+        limitations.append("Voice and camera measurements are not collected in the standard check-in and are not used in the index.")
+        if context.document_count:
+            limitations.append("Uploaded documents and user-confirmed laboratory entries are available as background context for the report. They are not inputs to the numerical personal-pattern index, and they do not establish a diagnosis.")
         now = datetime.now(timezone.utc)
         description = 'broadly consistent' if score >= 80 else 'moderately different' if score >= 60 else 'substantially different'
-        explanation = f"The current session is {description} from the personal baseline. The system used {len(modalities)} available signal groups, excluded unavailable or invalid values, and checked whether notable differences persist across recent observations. Persistence: {persistence}. This is an observational research signal, not a diagnosis."
-        check_in = DailyCheckIn(user_id=user_id, check_in_date=date.today(), status="completed", completed_at=now, extra_metadata={"source":"web_multimodal_check_in","model_version":MODEL_VERSION,"quality":quality,"missing_modalities":missing,"persistence":persistence})
+        explanation = f"The five self-reported answers in this check-in are {description} from the personal baseline. NUVYRA compares these answers with earlier check-ins and looks for changes that appear repeatedly over time. Persistence: {persistence}. This is an experimental personal comparison, not a diagnosis or a measure of medical accuracy."
+        check_in = DailyCheckIn(user_id=user_id, check_in_date=date.today(), status="completed", completed_at=now, extra_metadata={"source":"self_report_daily_check_in","model_version":MODEL_VERSION,"quality":quality,"missing_modalities":missing,"persistence":persistence})
         self.db.add(check_in)
         self.db.flush()
         feature_reads = []
@@ -234,22 +280,22 @@ class AIService:
                 value = current[name]
                 self.db.add(BiomarkerFeature(check_in_id=check_in.id, feature_name=name, feature_category=category, feature_value=value, source_modality=category, extracted_at=now, extra_properties={"model_version":MODEL_VERSION,"research_proxy":category in {"breathing","facial_dynamics","eye","gait_movement","head_movement"}}))
                 feature_reads.append(BiomarkerFeatureRead(name=name, category=category, value=value, deviation=deviations.get(name)))
-        metadata = {"model_name":MODEL_NAME,"model_version":MODEL_VERSION,"algorithm":algorithm,"baseline_observations":len(history),"data_quality_score":quality,"modalities_present":modalities,"missing_modalities":missing,"top_drivers":drivers,"recommendations":recommendations,"limitations":limitations,"persistence_signal":persistence,"source_duration_seconds":payload.source_duration_seconds,"voice_language":payload.voice_language,"context":context.model_dump()}
+        metadata = {"model_name":MODEL_NAME,"model_version":MODEL_VERSION,"algorithm":algorithm,"baseline_observations":len(history) + 1,"data_quality_score":quality,"modalities_present":modalities,"missing_modalities":missing,"top_drivers":drivers,"recommendations":recommendations,"limitations":limitations,"persistence_signal":persistence,"source_duration_seconds":payload.source_duration_seconds,"self_report_context":{"mood_deviation":payload.mood_deviation,"mood_level":payload.mood_level,"physical_comfort":payload.physical_comfort,"physical_comfort_observation":payload.physical_comfort_observation,"physical_comfort_notes":payload.physical_comfort_notes,"sleep_hours":payload.sleep_hours,"sleep_awakenings":payload.sleep_awakenings,"optional_observation_fraction":payload.symptom_burden},"context":context.model_dump()}
         self.db.add(HealthStabilityScore(check_in_id=check_in.id, overall_score=round(score,2), trend_category=trend, confidence=round(confidence,3), generated_at=now, explanation_summary=explanation, model_metadata=metadata))
         from app.api.v1.past_history_router import _reward_completed_check_in
         reward = _reward_completed_check_in(self.db, self.db.get(User, user_id), date.today())
         self.db.commit()
-        return AIAnalysisResponse(check_in_id=check_in.id, overall_score=round(score,2), trend=trend, confidence=round(confidence,3), model_name=MODEL_NAME, model_version=MODEL_VERSION, baseline_observations=len(history), explanation=explanation, features=feature_reads, generated_at=now, data_quality_score=quality, modalities_present=modalities, top_drivers=drivers, recommendations=recommendations, limitations=limitations, missing_modalities=missing, persistence_signal=persistence, context=context)
+        return AIAnalysisResponse(check_in_id=check_in.id, overall_score=round(score,2), trend=trend, confidence=round(confidence,3), model_name=MODEL_NAME, model_version=MODEL_VERSION, baseline_observations=len(history) + 1, explanation=explanation, features=feature_reads, generated_at=now, data_quality_score=quality, modalities_present=modalities, top_drivers=drivers, recommendations=recommendations, limitations=limitations, missing_modalities=missing, persistence_signal=persistence, context=context)
 
     def history(self, user_id: UUID, limit=30):
-        rows = self._history(user_id, limit)
+        rows = [row for row in self._history(user_id, limit) if (row[1].model_metadata or {}).get('model_version') == MODEL_VERSION]
         return AIHistoryResponse(items=[AIHistoryPoint(check_in_id=c.id, score=round(s.overall_score,2), trend=s.trend_category, confidence=round(s.confidence,3), generated_at=s.generated_at) for c,s,_ in reversed(rows)], baseline_observations=len(rows), model_name=MODEL_NAME, model_version=MODEL_VERSION)
 
     def latest(self, user_id: UUID):
-        rows = self._history(user_id, 1)
+        rows = [row for row in self._history(user_id, 100) if (row[1].model_metadata or {}).get('model_version') == MODEL_VERSION][:1]
         if not rows:
             return None
         c, s, _ = rows[0]
         features = self.db.execute(select(BiomarkerFeature).where(BiomarkerFeature.check_in_id == c.id)).scalars().all()
         m = s.model_metadata or {}
-        return AIAnalysisResponse(check_in_id=c.id, overall_score=round(s.overall_score,2), trend=s.trend_category, confidence=round(s.confidence,3), model_name=str(m.get("model_name",MODEL_NAME)), model_version=str(m.get("model_version",MODEL_VERSION)), baseline_observations=int(m.get("baseline_observations",0)), explanation=s.explanation_summary or "No explanation available.", features=[BiomarkerFeatureRead(name=f.feature_name, category=f.feature_category, value=float(f.feature_value), deviation=None) for f in features], generated_at=s.generated_at, data_quality_score=float(m.get("data_quality_score",0)), modalities_present=list(m.get("modalities_present",[])), top_drivers=list(m.get("top_drivers",[])), recommendations=list(m.get("recommendations",[])), limitations=list(m.get("limitations",[])), missing_modalities=list(m.get("missing_modalities",[])), persistence_signal=str(m.get("persistence_signal","INSUFFICIENT_HISTORY")), context=AIContextSummary(**m.get("context",{})))
+        return AIAnalysisResponse(check_in_id=c.id, overall_score=round(s.overall_score,2), trend=s.trend_category, confidence=round(s.confidence,3), model_name=str(m.get("model_name",MODEL_NAME)), model_version=str(m.get("model_version",MODEL_VERSION)), baseline_observations=int(m.get("baseline_observations",0)), explanation=s.explanation_summary or "No explanation available.", features=[BiomarkerFeatureRead(name=f.feature_name, category=f.feature_category, value=float(f.feature_value), deviation=None) for f in features if f.feature_name in {name for name, _ in FEATURES}], generated_at=s.generated_at, data_quality_score=float(m.get("data_quality_score",0)), modalities_present=list(m.get("modalities_present",[])), top_drivers=list(m.get("top_drivers",[])), recommendations=list(m.get("recommendations",[])), limitations=list(m.get("limitations",[])), missing_modalities=list(m.get("missing_modalities",[])), persistence_signal=str(m.get("persistence_signal","INSUFFICIENT_HISTORY")), context=self._context(user_id))

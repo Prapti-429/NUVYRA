@@ -19,7 +19,6 @@ const NotificationsPage=lazy(()=>import('../pages/NotificationsPage').then(m=>({
 const SettingsPage=lazy(()=>import('../pages/SettingsPage').then(m=>({default:m.SettingsPage})));
 const ProfilePage=lazy(()=>import('../pages/ProfilePage').then(m=>({default:m.ProfilePage})));
 const WelcomePage=lazy(()=>import('../components/NuvyraWelcome').then(m=>({default:m.default})));
-const DailyFlashcardPage=lazy(()=>import('../components/NuvyraDailyFlashcard').then(m=>({default:m.default})));
 const LoginPage=lazy(()=>import('../pages/LoginPage').then(m=>({default:m.LoginPage})));
 const RegisterPage=lazy(()=>import('../pages/RegisterPage').then(m=>({default:m.RegisterPage})));
 const ForgotPasswordPage=lazy(()=>import('../pages/ForgotPasswordPage').then(m=>({default:m.ForgotPasswordPage})));
@@ -28,30 +27,23 @@ const FallbackLoader=()=> <div className="min-h-screen flex items-center justify
 const lazyElement=(Component:React.LazyExoticComponent<React.ComponentType>)=><Suspense fallback={<FallbackLoader/>}><Component/></Suspense>;
 const onboardingKey = (userId?: string) => userId ? `nuvyra_onboarding_complete:${userId}` : 'nuvyra_onboarding_complete';
 
+const roleDestination = (role?: string) => role === 'administrator' ? '/partner-workspace'
+  : role === 'clinician' || role === 'researcher' ? '/clinical-workspace'
+  : '/dashboard';
+
 const FirstVisitRedirect: React.FC = () => {
   const { user } = useAuth();
-  const role = user?.role || 'patient';
-  if (role === 'patient' && localStorage.getItem(onboardingKey(user?.id)) !== 'true') {
+  if ((user?.role || 'patient') === 'patient' && localStorage.getItem(onboardingKey(user?.id)) !== 'true') {
     return <Navigate to="/welcome" replace />;
   }
-  return <Navigate to="/flashcard" replace />;
+  return <Navigate to={roleDestination(user?.role)} replace />;
 };
 
 const WelcomeRoute: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const key = onboardingKey(user?.id);
-  return <WelcomePage userId={user?.id || 'local'} onComplete={() => { localStorage.setItem(key, 'true'); navigate('/flashcard', { replace: true }); }} />;
-};
-
-const DailyFlashcardRoute: React.FC = () => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const role = user?.role || 'patient';
-  const destination = role === 'administrator' ? '/partner-workspace'
-    : role === 'clinician' || role === 'researcher' ? '/clinical-workspace'
-    : '/dashboard';
-  return <DailyFlashcardPage onComplete={() => navigate(destination, { replace: true })} />;
+  return <WelcomePage userId={user?.id || 'local'} onComplete={() => { localStorage.setItem(key, 'true'); navigate(roleDestination(user?.role), { replace: true }); }} />;
 };
 
 const router=createBrowserRouter([
@@ -61,7 +53,6 @@ const router=createBrowserRouter([
   {path:'/reset-password',element:lazyElement(ForgotPasswordPage)},
   {element:<ProtectedRoute/>,children:[
     {path:'/welcome',element:<WelcomeRoute/>},
-    {path:'/flashcard',element:<DailyFlashcardRoute/>},
     {path:'/',element:<AppShell/>,children:[
       {index:true,element:<FirstVisitRedirect/>},
       {path:'dashboard',element:<ProtectedRoute allowedRoles={['patient']}>{lazyElement(DashboardPage)}</ProtectedRoute>},

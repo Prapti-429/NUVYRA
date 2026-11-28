@@ -1,9 +1,9 @@
-"""Regression tests for the non-clinical multimodal research engine.
+"""Regression tests for the non-clinical self-report personal-pattern engine.
 
 These tests deliberately exercise the safety-critical invariants of the
 research inference layer without requiring a database:
 - invalid numeric values are rejected;
-- missing modalities are excluded rather than imputed as normal;
+- unsupported sensor modalities are excluded rather than imputed as normal;
 - short histories are reported as insufficient for persistence claims;
 - repeated deviations can be classified as persistent change;
 - data-quality scoring remains bounded.
@@ -29,48 +29,67 @@ def test_invalid_numeric_values_are_rejected() -> None:
 
 def test_missing_modalities_are_not_imputed() -> None:
     engine = service()
-    current = {"voice_pitch_hz": 180.0, "voice_rms": 0.2}
+    current = {"voice_pitch_hz": 180.0, "face_motion": 0.2}
     modalities = engine._modalities(current)
     missing = engine._missing(modalities)
 
-    assert modalities == ["voice"]
-    assert "voice" not in missing
-    assert set(missing) == set(MODALITY_NAMES) - {"voice"}
+    # Voice and camera proxies are intentionally not active score modalities.
+    assert modalities == []
+    assert set(missing) == set(MODALITY_NAMES)
 
 
-def test_quality_is_bounded_and_duration_aware() -> None:
+def test_required_self_report_ranges_are_enforced() -> None:
     engine = service()
-    payload = SimpleNamespace(source_duration_seconds=20)
-    current = {name: 1.0 for name, _ in FEATURES}
-    quality = engine._quality(current, payload)
+    payload = SimpleNamespace(fatigue=3.0, mood_deviation=0.0, energy_level=3.0, sleep_quality=3.0, stress_level=3.0, concentration_level=3.0, physical_comfort=1.0)
+    assert engine._invalid_required_ranges(payload) == {}
+    payload.fatigue = 6.0
+    payload.physical_comfort = 8.0
+    invalid = engine._invalid_required_ranges(payload)
+    assert set(invalid) == {"fatigue", "physical_comfort"}
 
-    assert 0.0 <= quality <= 1.0
-    assert quality > 0.5
+
+def test_required_self_report_completeness_is_bounded() -> None:
+    engine = service()
+    current = {name: 3.0 for name, _ in FEATURES}
+    required = {
+        "fatigue": 3.0, "energy_level": 3.0, "sleep_quality": 3.0,
+        "stress_level": 3.0, "concentration_level": 3.0,
+    }
+    complete_payload = SimpleNamespace(**required)
+    four_of_five_payload = SimpleNamespace(**{k: v for k, v in required.items() if k != "energy_level"})
+    three_of_five_payload = SimpleNamespace(**{k: v for k, v in required.items() if k not in {"energy_level", "stress_level"}})
+    complete = engine._quality(current, complete_payload)
+    four_of_five = engine._quality(current, four_of_five_payload)
+    three_of_five = engine._quality(current, three_of_five_payload)
+
+    assert complete == 1.0
+    assert four_of_five == 0.8
+    assert three_of_five == 0.6
 
 
 def test_persistence_requires_history() -> None:
     engine = service()
-    deviations = {"voice_pitch_hz": 2.0}
+    deviations = {"energy_level": 2.0}
     assert engine._persistence(deviations, []) == "INSUFFICIENT_HISTORY"
     assert engine._persistence(deviations, [None, None]) == "INSUFFICIENT_HISTORY"
 
 
 def test_persistent_change_requires_repeated_deviation() -> None:
     engine = service()
-    deviations = {"voice_pitch_hz": 2.0}
+    deviations = {"energy_level": 2.0}
     # Most-recent first. The same feature is meaningfully away from its
     # personal center in at least two of the last three usable sessions.
     history = [
-        (None, None, {"voice_pitch_hz": 120.0}),
-        (None, None, {"voice_pitch_hz": 118.0}),
-        (None, None, {"voice_pitch_hz": 100.0}),
-        (None, None, {"voice_pitch_hz": 99.0}),
-        (None, None, {"voice_pitch_hz": 101.0}),
+        (None, None, {"energy_level": 120.0}),
+        (None, None, {"energy_level": 118.0}),
+        (None, None, {"energy_level": 100.0}),
+        (None, None, {"energy_level": 99.0}),
+        (None, None, {"energy_level": 101.0}),
     ]
     assert engine._persistence(deviations, history) == "PERSISTENT_CHANGE"
 
 
 def test_no_deviation_is_not_reported_as_persistent() -> None:
     engine = service()
-    history = [(None, None, {"voice_pitch_hz": 100.0}) for _ in range(5)]
+    history = [(None, None, {"energy_level": 100.0}) for _ in range(5)]
     assert engine._persistence({}, history) == "NO_PERSISTENT_DEVIATION"

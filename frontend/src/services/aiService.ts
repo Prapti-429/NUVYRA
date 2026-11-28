@@ -1,9 +1,9 @@
 import apiClient from './apiClient';
 
 export interface AIAnalysisRequest {
-  fatigue: number;
-  mood_deviation: number;
-  symptom_burden: number;
+  fatigue?: number;
+  mood_deviation?: number;
+  symptom_burden?: number;
   energy_level?: number;
   sleep_quality?: number;
   stress_level?: number;
@@ -55,6 +55,7 @@ export interface AIContextSummary {
     dates: string[];
     follow_up_mentions: string[];
     summary: string;
+    confirmed_lab_results?: Array<{ test_name: string; value: string; unit: string; reference_range_text: string; collection_date?: string | null; status: string; explanation: string; verified: boolean }>;
   }>;
 }
 export interface AIAnalysisResponse {
