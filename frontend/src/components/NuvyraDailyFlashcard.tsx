@@ -38,7 +38,8 @@ export default function NuvyraDailyFlashcard({ onComplete }: { onComplete: () =>
   const deck = DECK[language] || DECK.English;
   const ui = UI[language] || UI.English;
   const [index] = useState(() => {
-    const previous = Number(localStorage.getItem('nuvyra_last_flashcard_index'));
+    const previousValue = localStorage.getItem('nuvyra_last_flashcard_index');
+    const previous = previousValue === null ? -1 : Number(previousValue);
     const next = Number.isInteger(previous) && previous >= 0 ? (previous + 1) % 6 : 0;
     localStorage.setItem('nuvyra_last_flashcard_index', String(next));
     return next;
