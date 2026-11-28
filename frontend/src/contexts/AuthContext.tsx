@@ -57,22 +57,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const initAuth = async () => {
-      const storedToken = localStorage.getItem('nuvyra_token');
-      if (storedToken) {
-        try {
-          const currentUser = await loadCurrentUser();
-          setUser(currentUser);
-          setToken(storedToken);
-        } catch (error: any) {
-          if (error?.status === 401 || error?.code === 'HTTP_401') { clearStoredAuth(); setToken(null); setUser(null); }
-          else { setToken(storedToken); }
-        }
-      }
-      setIsLoading(false);
-    };
+    let mounted = true;
+    const storedToken = localStorage.getItem('nuvyra_token');
 
-    initAuth();
+    if (!storedToken) {
+      setIsLoading(false);
+      return () => { mounted = false; };
+    }
+
+    // Restore the signed-in shell immediately from the signed token. Verify
+    // the full profile in the background so a sleeping API cannot leave the
+    // app stuck on a full-screen spinner before the user can continue.
+    const tokenUser = decodeAccessTokenUser(storedToken);
+    if (tokenUser) setUser(tokenUser);
+    setToken(storedToken);
+    setIsLoading(false);
+
+    void loadCurrentUser()
+      .then((currentUser) => {
+        if (!mounted) return;
+        setUser(currentUser);
+        setToken(localStorage.getItem('nuvyra_token') || storedToken);
+      })
+      .catch((error: any) => {
+        if (!mounted) return;
+        if (error?.status === 401 || error?.response?.status === 401 || error?.code === 'HTTP_401') {
+          clearStoredAuth();
+          setToken(null);
+          setUser(null);
+        } else if (tokenUser) {
+          setUser(tokenUser);
+        }
+      });
+
+    return () => { mounted = false; };
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -83,25 +101,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     const { access_token, refresh_token, user: authenticatedUser } = response.data || {};
 
-    if (!access_token) {
-      throw new Error('The server did not return a valid access token.');
+    // Validate the complete response before persisting anything. A partial
+    // response must never leave the UI looking signed in with a broken session.
+    if (!access_token || !authenticatedUser?.id) {
+      throw new Error('Sign-in could not be completed because the server returned an incomplete session. Please try again.');
     }
 
     localStorage.setItem('nuvyra_token', access_token);
     localStorage.setItem('access_token', access_token);
     if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
     setToken(access_token);
-
-    // The backend returns the authenticated profile in the same successful
-    // login response. Do not make a second /auth/me request part of login.
-    // This prevents a profile-query failure from being shown as an
-    // authentication failure.
-    if (authenticatedUser?.id) {
-      setUser(authenticatedUser as User);
-      return;
-    }
-
-    throw new Error('The server authenticated the account but did not return the user profile. Please redeploy the backend and frontend.');
+    setUser(authenticatedUser as User);
   };
 
   const register = async (email: string, password: string, fullName?: string) => {

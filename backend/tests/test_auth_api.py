@@ -292,14 +292,38 @@ def test_forgot_password_sends_single_use_reset_link_and_updates_password(
     assert new_login.status_code == status.HTTP_200_OK
 
 
-def test_forgot_password_does_not_disclose_unknown_email(client: TestClient) -> None:
+def test_forgot_password_does_not_disclose_unknown_email(client: TestClient, monkeypatch) -> None:
     """Unknown addresses receive the same public response without sending mail."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.example.test")
+    monkeypatch.setattr(settings, "SMTP_FROM_EMAIL", "no-reply@nuvyra.example")
+    monkeypatch.setattr(settings, "RESEND_API_KEY", None)
     response = client.post(
         "/api/v1/auth/forgot-password",
         json={"email": "not-registered@example.com"},
     )
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["detail"] == "If an account exists for that email, a password reset link will be sent shortly."
+
+
+def test_forgot_password_reports_unavailable_email_service(
+    client: TestClient,
+    test_patient_user: User,
+    monkeypatch,
+) -> None:
+    """A known account must not be told that a reset email was sent if mail is unconfigured."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "SMTP_HOST", None)
+    monkeypatch.setattr(settings, "SMTP_FROM_EMAIL", None)
+    monkeypatch.setattr(settings, "RESEND_API_KEY", None)
+    response = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "patient@example.com"},
+    )
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert "temporarily unavailable" in response.json()["detail"]
 
 
 def test_password_reset_rejects_invalid_and_expired_tokens(client: TestClient) -> None:

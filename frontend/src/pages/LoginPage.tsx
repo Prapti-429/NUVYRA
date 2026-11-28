@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { NuvyraLogo } from '../components/common/NuvyraLogo';
+import { warmBackend } from '../services/api';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -12,13 +13,15 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  useEffect(() => { void warmBackend(); }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setLoading(true);
 
     try {
-      await login(email, password);
+      await login(email.trim().toLowerCase(), password);
       // Let the account-specific first-visit redirect decide whether the user
       // needs the onboarding tour or should go directly to the dashboard.
       navigate('/', { replace: true });
@@ -27,10 +30,13 @@ export const LoginPage: React.FC = () => {
         err?.response?.data?.detail ||
         err?.response?.data?.message ||
         err?.message;
+      const networkFailure = err?.isNetworkError || err?.code === 'NETWORK_ERROR' || err?.code === 'ECONNABORTED';
       setErrorMsg(
-        typeof serverMessage === 'string' && serverMessage.trim()
-          ? serverMessage
-          : 'Authentication failed. Please verify credentials or connection.'
+        networkFailure
+          ? 'NUVYRA could not reach the server. Check your internet connection and try again. If this is your first request, the server may still be waking up.'
+          : typeof serverMessage === 'string' && serverMessage.trim()
+            ? serverMessage
+            : 'Sign-in could not be completed. Please check your details and try again.'
       );
     } finally {
       setLoading(false);
@@ -62,6 +68,7 @@ export const LoginPage: React.FC = () => {
               <label className="block text-xs font-medium text-slate-300 mb-1">Email Address</label>
               <input
                 type="email"
+                autoComplete="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -78,6 +85,7 @@ export const LoginPage: React.FC = () => {
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -99,7 +107,7 @@ export const LoginPage: React.FC = () => {
               disabled={loading}
               className="w-full bg-gradient-to-r from-sky-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-slate-950 font-semibold py-2.5 rounded-xl text-sm transition-all shadow-md disabled:opacity-50"
             >
-              {loading ? 'Authenticating...' : 'Sign In'}
+              {loading ? 'Connecting securely…' : 'Sign In'}
             </button>
           </form>
 
