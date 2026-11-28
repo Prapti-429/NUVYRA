@@ -21,7 +21,7 @@ from app.db.models.user import User
 from app.schemas.ai_schemas import AIAnalysisRequest, AIAnalysisResponse, AIHistoryPoint, AIHistoryResponse, AIContextSummary, BiomarkerFeatureRead
 
 MODEL_NAME = "Nuvyra Multimodal Longitudinal Biomarker Engine"
-MODEL_VERSION = "2.3.0"
+MODEL_VERSION = "2.4.0"
 # Only self-reported fields currently contribute to the personal-pattern score.
 # Voice is used only for technical capture checks in the client. Camera-derived
 # face, eye, head, gait and breathing estimates are excluded until validated.
@@ -223,7 +223,7 @@ class AIService:
                     "minimum_required": 0.80,
                 },
             )
-        history = self._history(user_id)
+        history = [row for row in self._history(user_id) if (row[1].model_metadata or {}).get('model_version') == MODEL_VERSION]
         context = self._context(user_id)
         score, algorithm, confidence, deviations = self._model_score(current, [r[2] for r in history])
         previous = history[0][1].overall_score if history else None
@@ -258,14 +258,14 @@ class AIService:
         return AIAnalysisResponse(check_in_id=check_in.id, overall_score=round(score,2), trend=trend, confidence=round(confidence,3), model_name=MODEL_NAME, model_version=MODEL_VERSION, baseline_observations=len(history), explanation=explanation, features=feature_reads, generated_at=now, data_quality_score=quality, modalities_present=modalities, top_drivers=drivers, recommendations=recommendations, limitations=limitations, missing_modalities=missing, persistence_signal=persistence, context=context)
 
     def history(self, user_id: UUID, limit=30):
-        rows = self._history(user_id, limit)
+        rows = [row for row in self._history(user_id, limit) if (row[1].model_metadata or {}).get('model_version') == MODEL_VERSION]
         return AIHistoryResponse(items=[AIHistoryPoint(check_in_id=c.id, score=round(s.overall_score,2), trend=s.trend_category, confidence=round(s.confidence,3), generated_at=s.generated_at) for c,s,_ in reversed(rows)], baseline_observations=len(rows), model_name=MODEL_NAME, model_version=MODEL_VERSION)
 
     def latest(self, user_id: UUID):
-        rows = self._history(user_id, 1)
+        rows = [row for row in self._history(user_id, 100) if (row[1].model_metadata or {}).get('model_version') == MODEL_VERSION][:1]
         if not rows:
             return None
         c, s, _ = rows[0]
         features = self.db.execute(select(BiomarkerFeature).where(BiomarkerFeature.check_in_id == c.id)).scalars().all()
         m = s.model_metadata or {}
-        return AIAnalysisResponse(check_in_id=c.id, overall_score=round(s.overall_score,2), trend=s.trend_category, confidence=round(s.confidence,3), model_name=str(m.get("model_name",MODEL_NAME)), model_version=str(m.get("model_version",MODEL_VERSION)), baseline_observations=int(m.get("baseline_observations",0)), explanation=s.explanation_summary or "No explanation available.", features=[BiomarkerFeatureRead(name=f.feature_name, category=f.feature_category, value=float(f.feature_value), deviation=None) for f in features], generated_at=s.generated_at, data_quality_score=float(m.get("data_quality_score",0)), modalities_present=list(m.get("modalities_present",[])), top_drivers=list(m.get("top_drivers",[])), recommendations=list(m.get("recommendations",[])), limitations=list(m.get("limitations",[])), missing_modalities=list(m.get("missing_modalities",[])), persistence_signal=str(m.get("persistence_signal","INSUFFICIENT_HISTORY")), context=AIContextSummary(**m.get("context",{})))
+        return AIAnalysisResponse(check_in_id=c.id, overall_score=round(s.overall_score,2), trend=s.trend_category, confidence=round(s.confidence,3), model_name=str(m.get("model_name",MODEL_NAME)), model_version=str(m.get("model_version",MODEL_VERSION)), baseline_observations=int(m.get("baseline_observations",0)), explanation=s.explanation_summary or "No explanation available.", features=[BiomarkerFeatureRead(name=f.feature_name, category=f.feature_category, value=float(f.feature_value), deviation=None) for f in features if f.feature_name in {name for name, _ in FEATURES}], generated_at=s.generated_at, data_quality_score=float(m.get("data_quality_score",0)), modalities_present=list(m.get("modalities_present",[])), top_drivers=list(m.get("top_drivers",[])), recommendations=list(m.get("recommendations",[])), limitations=list(m.get("limitations",[])), missing_modalities=list(m.get("missing_modalities",[])), persistence_signal=str(m.get("persistence_signal","INSUFFICIENT_HISTORY")), context=AIContextSummary(**m.get("context",{})))
