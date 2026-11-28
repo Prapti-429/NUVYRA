@@ -11,6 +11,18 @@ const normalizeBaseURL = (value: string): string => {
 
 export const baseURL = normalizeBaseURL(configuredURL);
 const API_ORIGIN = baseURL.replace(/\/api\/v1$/i, '');
+
+// Warm a sleeping hosted backend while the user is reading the sign-in or
+// registration screen. This runs in the background and never blocks the form.
+let backendWarmup: Promise<void> | null = null;
+export const warmBackend = (): Promise<void> => {
+  if (!backendWarmup) {
+    backendWarmup = axios.get(`${API_ORIGIN}/health`, { timeout: 12000 })
+      .then(() => undefined)
+      .catch(() => { backendWarmup = null; });
+  }
+  return backendWarmup;
+};
 // Do not repeatedly retry browser-level network failures: CORS rejections and
 // offline devices have no HTTP response and cannot be fixed by waiting. Retry
 // one time only for gateway errors or an actual request timeout.
