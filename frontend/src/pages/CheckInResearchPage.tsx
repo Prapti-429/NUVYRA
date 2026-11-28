@@ -134,6 +134,12 @@ export const CheckInResearchPage: React.FC = () => {
       </div>
     </header>
 
+    <section className="rounded-2xl border border-sky-400/20 bg-sky-400/5 px-4 py-3 sm:px-5">
+      <div className="flex items-center gap-2"><span className="text-lg text-sky-300">✦</span><h2 className="text-sm font-semibold text-sky-100">Just your answers. No recording needed.</h2></div>
+      <p className="mt-1 text-xs leading-5 text-slate-300">This version of NUVYRA uses the five reflections you choose to share. Camera and microphone measurements are switched off because everyday lighting, angles and recording conditions can make them unreliable. They are not used in your report or personal-pattern score.</p>
+      <div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-[10px] text-slate-300">No camera capture</span><span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-[10px] text-slate-300">No microphone capture</span><span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-[10px] text-slate-300">No facial or breathing scores</span></div>
+    </section>
+
     {error && <div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">{error}</div>}
 
     {step === 1 && !result && <section className="space-y-5">
