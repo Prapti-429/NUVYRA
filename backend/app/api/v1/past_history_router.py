@@ -202,6 +202,8 @@ def review_lab_results(document_id: uuid.UUID, payload: dict = Body(...), db: Se
     doc = db.scalar(select(MedicalDocument).where(MedicalDocument.id == document_id, MedicalDocument.user_id == current_user.id))
     if not doc:
         raise HTTPException(404, "Document not found.")
+    if str(doc.document_type or "").lower() not in {"report", "lab_report", "test_report"}:
+        raise HTTPException(400, "Laboratory result review is available only for report documents.")
     rows = payload.get("results")
     if not isinstance(rows, list) or not rows or len(rows) > 100:
         raise HTTPException(400, "Please review at least one result.")
@@ -224,7 +226,7 @@ def review_lab_results(document_id: uuid.UUID, payload: dict = Body(...), db: Se
         if (low_text and low is None) or (high_text and high is None) or (low is not None and high is not None and low > high):
             raise HTTPException(422, "Please check the numeric reference-range limits.")
         status = "range_not_comparable"
-        if numeric_value is not None and low is not None and high is not None:
+        if numeric_value is not None and low is not None and high is not None and unit.lower() != "not shown":
             status = "below_lab_range" if numeric_value < low else "above_lab_range" if numeric_value > high else "within_lab_range"
         confirmed.append({
             "test_name": name, "value": value_text, "unit": unit,
