@@ -4,7 +4,7 @@ import {aiService,AIAnalysisResponse} from '../services/aiService';
 import {InfoButton} from '../components/common/InfoButton';
 import {useLanguage,AppLanguage,APP_LANGUAGES} from '../contexts/LanguageContext';
 
-type Voice={rms:number;zcr:number;pitch:number;speechActivity:number;duration:number};
+type Voice={rms:number;zcr:number;pitch:number;speechActivity:number;duration:number;qualityScore:number};
 type Camera=Record<string,number>;
 
 const PROMPTS:Record<AppLanguage,string[]>={
@@ -24,6 +24,7 @@ const OBS:Record<AppLanguage,string[]>={
 };
 const moodMap:Record<string,number>={better:.1,same:0,different:.5,significant:1};
 const mean=(a:number[])=>a.reduce((x,y)=>x+y,0)/Math.max(1,a.length);
+const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n));
 const sd=(a:number[])=>{const m=mean(a);return Math.sqrt(mean(a.map(x=>(x-m)**2)));};
 
 async function getVoice(blob:Blob):Promise<Voice>{
@@ -38,7 +39,10 @@ async function getVoice(blob:Blob):Promise<Voice>{
   const frame=Math.max(256,Math.floor(audio.sampleRate*.025)),hop=Math.max(128,Math.floor(audio.sampleRate*.01));
   let frames=0,active=0,pitchSum=0,pitchN=0;
   for(let s=0;s+frame<d.length;s+=hop){let e=0;for(let j=0;j<frame;j++)e+=d[s+j]**2;const fr=Math.sqrt(e/frame);frames++;if(fr>Math.max(rms*.35,.01)){active++;const minLag=Math.floor(audio.sampleRate/400),maxLag=Math.min(Math.floor(audio.sampleRate/70),frame-1);let best=0,bestC=-Infinity;for(let lag=minLag;lag<=maxLag;lag++){let c=0;for(let j=0;j<frame-lag;j+=4)c+=d[s+j]*d[s+j+lag];if(c>bestC){bestC=c;best=lag;}}const p=best?audio.sampleRate/best:0;if(p>=70&&p<=400){pitchSum+=p;pitchN++;}}}
-  return{rms:Number(rms.toFixed(6)),zcr:Number(Math.min(1,zcr).toFixed(6)),pitch:Number((pitchN?pitchSum/pitchN:0).toFixed(2)),speechActivity:Number((frames?active/frames:0).toFixed(4)),duration:audio.duration};
+  const speechActivity=frames?active/frames:0;
+  const durationScore=clamp(audio.duration/15,0,1),speechScore=clamp((speechActivity-.05)/.45,0,1),levelScore=clamp(1-Math.abs(rms-.08)/.08,0,1);
+  const qualityScore=Math.round((durationScore*.2+speechScore*.6+levelScore*.2)*100);
+  return{rms:Number(rms.toFixed(6)),zcr:Number(Math.min(1,zcr).toFixed(6)),pitch:Number((pitchN?pitchSum/pitchN:0).toFixed(2)),speechActivity:Number(speechActivity.toFixed(4)),duration:audio.duration,qualityScore};
  }finally{await ctx.close();}
 }
 
@@ -60,7 +64,7 @@ export const CheckInResearchPage:React.FC=()=>{
    const stream=await navigator.mediaDevices.getUserMedia({audio:true});streamRef.current=stream;
    const mime=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm';
    const r=new MediaRecorder(stream,{mimeType:mime}),chunks:Blob[]=[];r.ondataavailable=e=>e.data.size&&chunks.push(e.data);
-   r.onstop=async()=>{try{const v=await getVoice(new Blob(chunks,{type:mime}));if(v.duration<3||v.speechActivity<.08){setError('Voice sample is too short or too quiet. Please record again for at least 3 seconds and speak naturally.');setVoice(null);}else setVoice(v);}catch{setError('Voice analysis failed. Please record the sample again.');}finally{stream.getTracks().forEach(t=>t.stop());streamRef.current=null;setRecording(false);}};
+   r.onstop=async()=>{try{const v=await getVoice(new Blob(chunks,{type:mime}));if(v.duration<10||v.qualityScore<80){setError(`Voice recording quality is ${v.qualityScore}%. NUVYRA requires at least 80% to continue. Please record again: use a quiet room, keep the microphone about 15–20 cm away, speak clearly at your usual pace, and read the full prompt. This score checks recording conditions only, not your health.`);setVoice(null);}else setVoice(v);}catch{setError('Voice analysis failed. Please record the sample again.');}finally{stream.getTracks().forEach(t=>t.stop());streamRef.current=null;setRecording(false);}};
    r.start(250);setRecording(true);const started=performance.now();const timer=window.setInterval(()=>{const left=Math.max(0,Math.ceil(20-(performance.now()-started)/1000));setSeconds(left);if(!left)window.clearInterval(timer);},250);
    window.setTimeout(()=>{window.clearInterval(timer);if(r.state!=='inactive')r.stop();},20000);
   }catch{setError('Microphone access was unavailable. Please allow microphone access and record the voice sample again.');setRecording(false);}
@@ -78,9 +82,11 @@ export const CheckInResearchPage:React.FC=()=>{
     for(let i=0;i<p.length;i+=4){const x=(i/4)%160,y=Math.floor((i/4)/160),v=.2126*p[i]+.7152*p[i+1]+.0722*p[i+2];total+=v;if(x<55)left+=v;if(x>105)right+=v;if(y>65&&x>35&&x<125){lower+=v;n++;}if(prev)diff+=Math.abs(v-(.2126*prev[i]+.7152*prev[i+1]+.0722*prev[i+2]));}
     motion.push(diff/(160*120*255));lum.push(total/(160*120*255));head.push(Math.abs(left-right)/(160*120*255));breath.push(lower/Math.max(1,n)/255);prev=new Uint8ClampedArray(p);await new Promise(r=>setTimeout(r,200));
    }
-   const avgLum=mean(lum);if(avgLum<.12||avgLum>.9)throw Error('Camera lighting is insufficient. Please face a light source, keep the camera at eye level, center your face and upper torso, and record again.');
-   if(sd(motion)>.12)throw Error('Camera signal is unstable. Keep the camera steady, center your face and upper torso, and record again.');
-   const out:Camera={face_motion:Number(mean(motion).toFixed(6)),face_luminance_variability:Number(sd(lum).toFixed(6)),head_motion:Number(mean(head).toFixed(6)),head_motion_variability:Number(sd(head).toFixed(6))};
+   const avgLum=mean(lum),motionVariability=sd(motion);
+   const lightingScore=clamp(1-Math.abs(avgLum-.45)/.45,0,1),stabilityScore=clamp(1-motionVariability/.12,0,1);
+   const qualityScore=Math.round((lightingScore*.5+stabilityScore*.5)*100);
+   if(qualityScore<80)throw Error(`Camera recording quality is ${qualityScore}%. NUVYRA requires at least 80% to continue. Please try again: face a soft light source, avoid a bright window behind you, place the camera at eye level, keep your face and shoulders centered, and steady the phone. This score checks lighting and image stability only; it does not assess your health or verify head position.`);
+   const out:Camera={quality_score:qualityScore,face_motion:Number(mean(motion).toFixed(6)),face_luminance_variability:Number(sd(lum).toFixed(6)),head_motion:Number(mean(head).toFixed(6)),head_motion_variability:Number(sd(head).toFixed(6))};
    const low=mean(breath);out.breathing_variability=Number(sd(breath).toFixed(6));out.breathing_rate_per_minute=Number(Math.max(6,Math.min(30,12+low*10)).toFixed(2));
    setCamera(out);
   }catch(e:any){setError(e?.message||'Camera analysis failed. Please record the camera sample again.');}
@@ -119,17 +125,17 @@ export const CheckInResearchPage:React.FC=()=>{
   {step===2&&<section className="rounded-2xl border border-slate-800 bg-[#111827] p-6 space-y-6">
    <div><div className="flex items-center gap-2"><h2 className="text-2xl font-semibold">Voice and speech</h2>{info('Voice capture','NUVYRA needs a usable voice sample to calculate voice features. A short or very quiet sample is rejected instead of being scored as missing data.')}</div><div className="grid grid-cols-3 gap-2 mt-3">{APP_LANGUAGES.map(({value:l,native})=><button type="button" key={l} onClick={()=>changeLanguage(l)} className={`rounded-xl border py-2 text-xs ${language===l?'bg-white text-slate-950':'border-slate-700 text-slate-300'}`}>{native}</button>)}</div></div>
    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5"><p className="text-xs uppercase text-slate-500">Speaking prompt</p><p className="mt-2 leading-7">{prompt}</p><button type="button" onClick={()=>{const a=(PROMPTS[language] || PROMPTS.English).filter(x=>x!==prompt);setPrompt(a[Math.floor(Math.random()*a.length)]||(PROMPTS[language] || PROMPTS.English)[0])}} className="mt-3 text-sm text-sky-300 underline">Use another prompt</button></div>
-   <div className="rounded-xl border border-slate-800 p-4 text-sm leading-6 text-slate-300"><strong className="text-white">Before recording:</strong> use a reasonably quiet place, keep a comfortable distance from the microphone, speak naturally at your normal pace and volume, and do not deliberately change your voice.</div>
+   <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 text-sm leading-6 text-slate-300"><strong className="text-white">How to record a useful sample</strong><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Move to a quiet room and pause music, television, or nearby conversations.</li><li>Keep the phone still, with its microphone about 15–20 cm from your mouth. Do not cover the microphone.</li><li>Read the prompt shown above in the selected language. Speak in your everyday voice, at a comfortable pace and volume.</li><li>Use complete natural sentences for the full recording. Do not whisper, shout, imitate an accent, or force your pitch.</li><li>If you stumble, simply continue naturally. You can record again if you prefer.</li></ol><p className="mt-2 text-xs text-slate-400">The 80% threshold is a technical recording-quality check, not a health score or a measure of how well you speak.</p></div>
    <button type="button" disabled={recording} onClick={record} className="mx-auto block rounded-xl bg-sky-500 px-6 py-3 font-semibold text-slate-950 disabled:opacity-50">{recording?`Recording… ${seconds}s`:voice?'Voice sample captured':'Record 20-second sample'}</button>
-   {voice&&<div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-xs text-slate-400">{[['Duration',`${voice.duration.toFixed(1)} s`],['Pitch',`${voice.pitch.toFixed(0)} Hz`],['Speech activity',`${Math.round(voice.speechActivity*100)}%`],['Sound level',voice.rms.toFixed(4)]].map(([k,v])=><div key={String(k)} className="rounded-xl bg-slate-900 p-3"><b className="block text-white">{v}</b><span>{k}</span></div>)}</div>}
+   {voice&&<div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-center text-xs text-slate-400">{[['Recording quality',`${voice.qualityScore}%`],['Duration',`${voice.duration.toFixed(1)} s`],['Pitch estimate',`${voice.pitch.toFixed(0)} Hz`],['Speech activity',`${Math.round(voice.speechActivity*100)}%`],['Sound level',voice.rms.toFixed(4)]].map(([k,v])=><div key={String(k)} className="rounded-xl bg-slate-900 p-3"><b className="block text-white">{v}</b><span>{k}</span></div>)}</div>}
    <button type="button" disabled={!voice} onClick={()=>setStep(3)} className="w-full rounded-xl bg-teal-500 py-3 font-semibold text-slate-950 disabled:opacity-40">Continue to camera</button>
   </section>}
 
   {step===3&&<section className="rounded-2xl border border-slate-800 bg-[#111827] p-6 space-y-6">
-   <div><div className="flex items-center gap-2"><h2 className="text-2xl font-semibold">Camera and visual check</h2>{info('Camera instructions','For a usable capture, keep the camera at eye level, center your face and upper torso, face a light source, avoid a bright light behind you, keep the camera steady, and remain naturally still.')}</div><div className="mt-3 rounded-xl border border-slate-800 bg-slate-900 p-4 text-sm leading-6 text-slate-300"><strong className="text-white">Positioning:</strong> camera at eye level; face and upper torso centered; even front lighting; no strong backlight; camera steady; blink and breathe normally.</div></div>
+   <div><div className="flex items-center gap-2"><h2 className="text-2xl font-semibold">Camera and visual check</h2>{info('Camera instructions','For a usable capture, keep the camera at eye level, center your face and upper torso, face a light source, avoid a bright light behind you, keep the camera steady, and remain naturally still.')}</div><div className="mt-3 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 text-sm leading-6 text-slate-300"><strong className="text-white">Follow these steps before you start</strong><ol className="mt-2 list-decimal space-y-1 pl-5"><li>Prop your phone securely in portrait or landscape position; do not hold it while recording.</li><li>Place the camera at approximately eye level, about an arm’s length away.</li><li>Sit comfortably with your full face, forehead, chin, neck, and shoulders visible in the preview. Keep your face near the centre.</li><li>Face a soft, even light. Avoid a bright window or lamp directly behind you, harsh shadows, and very dim rooms.</li><li>Look towards the camera, keep your head in a comfortable neutral position, and let your face relax.</li><li>During the short capture, blink and breathe normally. Do not force blinking, hold your breath, exaggerate expressions, or make large or fast head movements.</li></ol><p className="mt-2 text-xs text-slate-400">For this version, keep your head facing forward. The current camera pipeline does not have a validated face-landmark tracker, so it cannot reliably tell whether you turned your head left or right. We should not pretend it can measure those movements.</p></div></div>
    <video ref={videoRef} muted playsInline className="mx-auto aspect-video w-full max-w-md rounded-xl bg-black object-cover scale-x-[-1]"/><canvas ref={canvasRef} className="hidden"/>
    <button type="button" disabled={capturing} onClick={capture} className="mx-auto block rounded-xl bg-teal-500 px-6 py-3 font-semibold text-slate-950 disabled:opacity-50">{capturing?'Checking camera…':camera?'Camera sample captured':'Start 10-second camera check'}</button>
-   {camera&&<div className="grid grid-cols-2 md:grid-cols-3 gap-2">{Object.entries(camera).map(([k,v])=><div key={k} className="rounded-xl bg-slate-900 p-3 text-xs"><div className="text-slate-400">{k.replaceAll('_',' ')}</div><b className="mt-1 block text-white">{Number(v).toFixed(4)}</b></div>)}</div>}
+   {camera&&<div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><div className="text-xs text-slate-400">Camera recording quality</div><div className="mt-1 text-2xl font-semibold text-emerald-300">{camera.quality_score}%</div><p className="mt-1 text-xs text-slate-400">Passed the 80% lighting-and-stability threshold. This is not a health or diagnostic confidence score.</p></div>}
    <button type="button" disabled={!camera} onClick={()=>setStep(4)} className="w-full rounded-xl bg-sky-500 py-3 font-semibold text-slate-950 disabled:opacity-40">Review check-in</button>
   </section>}
 
