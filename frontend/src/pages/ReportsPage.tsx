@@ -51,7 +51,7 @@ const TrendChart:React.FC<{points:AIHistoryPoint[];language:AppLanguage}>=({poin
 };
 
 export const ReportsPage:React.FC=()=>{
- const {language}=useLanguage();const t=COPY[language];
+ const {language}=useLanguage();const t=COPY[language] || COPY.English;
  const [history,setHistory]=useState<AIHistoryPoint[]>([]),[latestAnalysis,setLatestAnalysis]=useState<Awaited<ReturnType<typeof aiService.latest>>|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState<string|null>(null),[downloading,setDownloading]=useState<string|null>(null),[selected,setSelected]=useState('monthly');
  useEffect(()=>{let active=true;Promise.all([aiService.history(90),aiService.latest().catch(()=>null)]).then(([r,a])=>{if(active){setHistory(r?.items||[]);setLatestAnalysis(a)}}).catch((e:any)=>{if(active)setError(e?.message||t.error)}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[]);
  const sorted=useMemo(()=>[...history].sort((a,b)=>new Date(a.generated_at).getTime()-new Date(b.generated_at).getTime()),[history]);
