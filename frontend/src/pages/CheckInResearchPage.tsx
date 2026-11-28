@@ -27,6 +27,26 @@ const mean=(a:number[])=>a.reduce((x,y)=>x+y,0)/Math.max(1,a.length);
 const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n));
 const sd=(a:number[])=>{const m=mean(a);return Math.sqrt(mean(a.map(x=>(x-m)**2)));};
 
+function mediaAccessError(error:unknown,kind:'microphone'|'camera'):string{
+ const name=error instanceof DOMException?error.name:(error as {name?:string})?.name||'';
+ const device=kind==='microphone'?'microphone':'camera';
+ if(!window.isSecureContext)return 'NUVYRA cannot access the '+device+' because this page is not running in a secure context. Open the official HTTPS app address or the installed NUVYRA app, then try again.';
+ if(!navigator.mediaDevices?.getUserMedia)return 'This browser or in-app WebView does not provide media access. Update Chrome/Android System WebView, close and reopen NUVYRA, or try the HTTPS website in Chrome.';
+ if(name==='NotAllowedError'||name==='PermissionDeniedError'||name==='SecurityError')return 'NUVYRA does not have permission to use your '+device+'. In your browser, open the site settings for NUVYRA and set '+device+' to Allow, then reload the app. On Android, open Settings → Apps → NUVYRA → Permissions and allow '+device+'. If you previously blocked the request, change it in Settings rather than repeatedly tapping Record.';
+ if(name==='NotFoundError'||name==='DevicesNotFoundError')return 'No usable '+device+' was found. Connect or enable a '+device+' and try again.';
+ if(name==='NotReadableError'||name==='TrackStartError')return 'Your '+device+' may already be in use by another app, or the operating system could not start it. Close camera/voice apps and browser tabs using it, then try again.';
+ if(name==='OverconstrainedError'||name==='ConstraintNotSatisfiedError')return 'The available '+device+' does not support the requested settings. Try another camera or device.';
+ if(name==='AbortError')return 'The '+device+' could not start. Close and reopen NUVYRA and try again.';
+ return 'NUVYRA could not start the '+device+'. Check that the device is connected, the app has permission, and no other app is using it. Details: '+(error instanceof Error?error.message:'unknown media error');
+}
+
+async function requestMedia(kind:'microphone'|'camera',constraints:MediaStreamConstraints):Promise<MediaStream>{
+ if(!window.isSecureContext)throw new Error(mediaAccessError(new Error('Insecure context'),'microphone'));
+ if(!navigator.mediaDevices?.getUserMedia)throw new Error(mediaAccessError(new Error('getUserMedia unavailable'),kind));
+ try{return await navigator.mediaDevices.getUserMedia(constraints);}
+ catch(error){throw new Error(mediaAccessError(error,kind));}
+}
+
 async function getVoice(blob:Blob):Promise<Voice>{
  const AC=window.AudioContext||(window as typeof window&{webkitAudioContext?:typeof AudioContext}).webkitAudioContext;
  if(!AC)throw Error('Audio analysis is unavailable in this browser.');
@@ -61,19 +81,21 @@ export const CheckInResearchPage:React.FC=()=>{
  const record=async()=>{
   setError('');setVoice(null);
   try{
-   const stream=await navigator.mediaDevices.getUserMedia({audio:true});streamRef.current=stream;
-   const mime=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm';
-   const r=new MediaRecorder(stream,{mimeType:mime}),chunks:Blob[]=[];r.ondataavailable=e=>e.data.size&&chunks.push(e.data);
+   if(!window.MediaRecorder)throw new Error('Audio recording is not supported by this browser. Please update Chrome or use the installed NUVYRA app.');
+   const stream=await requestMedia('microphone',{audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});streamRef.current=stream;
+   const mimeCandidates=['audio/webm;codecs=opus','audio/webm','audio/mp4'];
+   const mime=mimeCandidates.find(type=>MediaRecorder.isTypeSupported(type));
+   const r=new MediaRecorder(stream,mime?{mimeType:mime}:undefined),chunks:Blob[]=[];r.ondataavailable=e=>e.data.size&&chunks.push(e.data);
    r.onstop=async()=>{try{const v=await getVoice(new Blob(chunks,{type:mime}));if(v.duration<10||v.qualityScore<80){setError(`Voice recording quality is ${v.qualityScore}%. NUVYRA requires at least 80% to continue. Please record again: use a quiet room, keep the microphone about 15–20 cm away, speak clearly at your usual pace, and read the full prompt. This score checks recording conditions only, not your health.`);setVoice(null);}else setVoice(v);}catch{setError('Voice analysis failed. Please record the sample again.');}finally{stream.getTracks().forEach(t=>t.stop());streamRef.current=null;setRecording(false);}};
    r.start(250);setRecording(true);const started=performance.now();const timer=window.setInterval(()=>{const left=Math.max(0,Math.ceil(20-(performance.now()-started)/1000));setSeconds(left);if(!left)window.clearInterval(timer);},250);
    window.setTimeout(()=>{window.clearInterval(timer);if(r.state!=='inactive')r.stop();},20000);
-  }catch{setError('Microphone access was unavailable. Please allow microphone access and record the voice sample again.');setRecording(false);}
+  }catch(e){streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setError(e instanceof Error?e.message:'Microphone could not be started. Check app permissions and try again.');setRecording(false);}
  };
 
  const capture=async()=>{
   setError('');setCamera(null);setCapturing(true);
   try{
-   const stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});streamRef.current=stream;
+   const stream=await requestMedia('camera',{video:{width:{ideal:640},height:{ideal:480},facingMode:{ideal:'user'}},audio:false});streamRef.current=stream;
    if(!videoRef.current||!canvasRef.current)throw Error('Camera preview is unavailable.');
    videoRef.current.srcObject=stream;await videoRef.current.play();const canvas=canvasRef.current;canvas.width=160;canvas.height=120;
    const ctx=canvas.getContext('2d',{willReadFrequently:true});if(!ctx)throw Error('Camera analysis is unavailable.');
@@ -88,7 +110,7 @@ export const CheckInResearchPage:React.FC=()=>{
    if(qualityScore<80)throw Error(`Camera recording quality is ${qualityScore}%. NUVYRA requires at least 80% to continue. Please try again: face a soft light source, avoid a bright window behind you, place the camera at eye level, keep your face and shoulders centered, and steady the phone. This score checks lighting and image stability only; it does not assess your health or verify head position.`);
    const out:Camera={quality_score:qualityScore};
    setCamera(out);
-  }catch(e:any){setError(e?.message||'Camera analysis failed. Please record the camera sample again.');}
+  }catch(e:any){setError(e?.message||'Camera analysis failed. Please check camera permission and try again.');}
   finally{streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setCapturing(false);}
  };
 
