@@ -38,6 +38,16 @@ def test_missing_modalities_are_not_imputed() -> None:
     assert set(missing) == set(MODALITY_NAMES)
 
 
+def test_required_self_report_ranges_are_enforced() -> None:
+    engine = service()
+    current = {name: 3.0 for name, _ in FEATURES}
+    assert engine._invalid_required_ranges(current) == {}
+    current["fatigue"] = 6.0
+    current["physical_comfort"] = 8.0
+    invalid = engine._invalid_required_ranges(current)
+    assert set(invalid) == {"fatigue", "physical_comfort"}
+
+
 def test_required_self_report_completeness_is_bounded() -> None:
     engine = service()
     payload = SimpleNamespace(source_duration_seconds=20)
