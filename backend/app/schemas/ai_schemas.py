@@ -10,8 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class AIAnalysisRequest(BaseModel):
     """Self-reported answers for one daily check-in.
 
-    Up to five 1–5 ratings contribute to the current experimental personal-pattern
-    index; at least four are required. Categorical answers are context only. Legacy sensor
+    Five 1–5 ratings contribute to the current experimental personal-pattern
+    index; all five are required before a check-in is saved. Categorical answers are context only. Legacy sensor
     fields remain accepted for backwards compatibility but are ignored by the
     current scoring model and are not collected in the standard check-in.
     """
