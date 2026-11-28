@@ -45,6 +45,16 @@ const Info: React.FC<{ title: string; children: React.ReactNode }> = ({ title, c
 
 type CardData = { signal: string; parameter: string; unit: string; value: number | null; deviation: number | null | undefined; meaning: string };
 const makeCard = (f: BiomarkerFeature): CardData => { const [parameter, unit, meaning] = parameterInfo(f.name || f.category || 'research signal'); return { signal: signalName(f.category || f.name), parameter, unit, value: Number.isFinite(f.value) ? f.value : null, deviation: f.deviation, meaning }; };
+const localDayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+const DAILY_TRIVIA = [
+  { question:'Which planet is known as the Red Planet?', options:['Venus','Mars','Jupiter','Mercury'], answer:1, fact:'Mars looks reddish because iron minerals in its soil have oxidised.' },
+  { question:'What is the largest ocean on Earth?', options:['Atlantic Ocean','Indian Ocean','Pacific Ocean','Arctic Ocean'], answer:2, fact:'The Pacific Ocean is the largest and deepest ocean on Earth.' },
+  { question:'Which gas do plants absorb from the atmosphere during photosynthesis?', options:['Oxygen','Carbon dioxide','Nitrogen','Hydrogen'], answer:1, fact:'Plants use carbon dioxide, water and light energy to make sugars.' },
+  { question:'How many sides does a hexagon have?', options:['Five','Six','Seven','Eight'], answer:1, fact:'A hexagon is a polygon with six sides and six angles.' },
+  { question:'Which is the closest star to Earth?', options:['Sirius','The Sun','Proxima Centauri','Polaris'], answer:1, fact:'The Sun is our nearest star, about 150 million kilometres away on average.' },
+  { question:'What is the process by which liquid water becomes water vapour?', options:['Condensation','Freezing','Evaporation','Precipitation'], answer:2, fact:'Evaporation happens when liquid water gains enough energy to become vapour.' },
+  { question:'Which instrument is used to measure atmospheric pressure?', options:['Thermometer','Barometer','Hygrometer','Anemometer'], answer:1, fact:'A barometer measures air pressure, which can help with weather forecasting.' }
+];
 
 const SignalCard: React.FC<{ card: CardData }> = ({ card }) => {
   const different = card.deviation != null && Math.abs(card.deviation) > 2;
@@ -64,6 +74,21 @@ export const DashboardPage: React.FC = () => {
   const [history, setHistory] = useState<AIHistoryResponse | null>(null);
   const [rewards, setRewards] = useState<{ coins: number; streak: number; last_check_in_date?: string | null } | null>(null);
   const [flippedGuideCard, setFlippedGuideCard] = useState<number | null>(null);
+  const triviaDay = localDayKey();
+  const trivia = DAILY_TRIVIA[Math.floor(Date.now()/86400000)%DAILY_TRIVIA.length];
+  const [triviaPoints,setTriviaPoints] = useState<number>(()=>Number(localStorage.getItem('nuvyra_trivia_points')||0));
+  const [triviaAnswered,setTriviaAnswered] = useState<boolean>(()=>localStorage.getItem('nuvyra_trivia_answered_day')===localDayKey());
+  const [triviaChoice,setTriviaChoice] = useState<number|null>(null);
+  const [triviaFeedback,setTriviaFeedback] = useState('');
+  const answerTrivia = () => {
+    if(triviaAnswered||triviaChoice===null)return;
+    if(triviaChoice===trivia.answer){
+      const next=triviaPoints+5;
+      setTriviaPoints(next);localStorage.setItem('nuvyra_trivia_points',String(next));
+      localStorage.setItem('nuvyra_trivia_answered_day',triviaDay);
+      setTriviaAnswered(true);setTriviaFeedback(`Correct! +5 knowledge points. ${trivia.fact}`);
+    }else setTriviaFeedback('Not quite. Have another try — you can answer again today.');
+  };
   useEffect(() => { let active = true; Promise.allSettled([aiService.latest(), aiService.history(30), apiClient.get('/past-history/rewards')]).then(([a,b,c]) => { if (!active) return; if (a.status === 'fulfilled') setLatest(a.value); if (b.status === 'fulfilled') setHistory(b.value); if (c.status === 'fulfilled') setRewards(c.value.data); }); return () => { active = false; }; }, []);
   const score = latest?.overall_score ?? 0;
   const trend = latest?.trend ?? 'INITIAL';
@@ -140,6 +165,17 @@ export const DashboardPage: React.FC = () => {
           </button>
         ))}
       </div>
+    </section>
+    <section aria-label="Daily trivia" className="rounded-3xl border border-sky-500/20 bg-gradient-to-br from-sky-500/10 via-[#111827] to-slate-950 p-6 sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="text-xs uppercase tracking-[0.18em] text-sky-300 font-semibold">A little curiosity, every day</p><h2 className="mt-1 text-2xl font-bold text-white">Trivia of the day ✦</h2><p className="mt-2 text-sm text-slate-400">One quick general-knowledge question. Correct answers earn 5 knowledge points — never tied to health data.</p></div>
+        <div className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-center"><div className="text-xl">⭐</div><strong className="block text-xl text-white">{triviaPoints}</strong><span className="text-[10px] text-slate-500">knowledge points</span></div>
+      </div>
+      <h3 className="mt-5 text-base font-semibold text-white">{trivia.question}</h3>
+      <div className="mt-3 grid sm:grid-cols-2 gap-2">{trivia.options.map((option,index)=><button key={option} type="button" disabled={triviaAnswered} aria-pressed={triviaChoice===index} onClick={()=>{setTriviaChoice(index);setTriviaFeedback('');}} className={`rounded-xl border p-3 text-left text-sm transition ${triviaChoice===index?'border-sky-400 bg-sky-500/10 text-white':'border-slate-700 bg-slate-950/60 text-slate-300 hover:border-sky-500/50'} disabled:cursor-not-allowed disabled:opacity-60`}>{option}</button>)}</div>
+      <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" disabled={triviaAnswered||triviaChoice===null} onClick={answerTrivia} className="rounded-xl bg-sky-500 px-5 py-2.5 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">{triviaAnswered?'Answered today':'Submit answer'}</button>{triviaAnswered&&<span className="text-xs text-emerald-300">Come back tomorrow for a new question.</span>}</div>
+      {triviaFeedback&&<p role="status" className="mt-3 rounded-xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-200">{triviaFeedback}</p>}
+      <p className="mt-3 text-[10px] text-slate-500">Knowledge points are currently saved on this device and browser. They are separate from NUVYRA health-monitoring rewards.</p>
     </section>
     <section className="rounded-3xl bg-gradient-to-br from-amber-500/10 via-[#111827] to-slate-950 border border-amber-400/20 p-6 sm:p-7 shadow-xl shadow-black/10"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5"><div><p className="text-xs uppercase tracking-[0.18em] text-amber-300 font-semibold">NUVYRA continuity rewards</p><h2 className="text-2xl font-bold text-white mt-1">Keep your monitoring streak going ✦</h2><p className="text-sm text-slate-400 mt-2 max-w-xl">Complete a NUVYRA daily check-in consistently to collect coins and build a streak. These rewards recognize participation only — they never depend on symptoms, scores, medicines, or test results.</p></div><div className="flex gap-3"><div className="min-w-[110px] rounded-2xl bg-slate-950 border border-slate-800 p-4 text-center"><div className="text-2xl">🪙</div><strong className="block text-2xl text-white mt-1">{rewards?.coins ?? 0}</strong><span className="text-[11px] text-slate-500">coins</span></div><div className="min-w-[110px] rounded-2xl bg-slate-950 border border-slate-800 p-4 text-center"><div className="text-2xl">🔥</div><strong className="block text-2xl text-white mt-1">{rewards?.streak ?? 0}</strong><span className="text-[11px] text-slate-500">day streak</span></div></div></div><div className="mt-4 text-xs text-slate-500">Daily check-in: +10 coins · Every 7-day streak milestone: +25 bonus coins</div></section>
     <div className="rounded-3xl bg-gradient-to-br from-sky-950/50 via-[#111b2d] to-[#0d1523] border border-sky-500/20 p-6 sm:p-8 shadow-xl"><div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4"><div><div className="flex items-center gap-2"><h2 className="text-xl font-semibold text-white">How familiar is today?</h2><Info title="Your personal pattern">NUVYRA learns your usual pattern from previous check-ins. There is no single universal healthy number that applies to everyone.</Info></div><p className="text-sm text-slate-400 mt-2">Your personal reference is more useful than a one-size-fits-all target.</p></div><StatusBadge status={latest ? status : 'neutral'} label={statusLabel} /></div><div className="mt-8 grid lg:grid-cols-3 gap-6 items-center"><div><div className="text-xs text-slate-500 uppercase tracking-wider">Experimental stability index</div><div className="text-6xl font-extrabold text-white mt-1">{latest ? Math.round(score) : '—'}</div><p className="text-xs text-slate-400 mt-2">A research index, not a medical score and not clinically validated.</p></div><div className="lg:col-span-2 rounded-2xl bg-black/20 border border-white/5 p-5"><div className="flex justify-between text-xs mb-3"><span className="text-slate-400">Your usual pattern</span><span className="text-slate-400">Today</span></div><div className="relative h-10 flex items-center"><div className="h-3 rounded-full bg-slate-700/80 w-full"/><div className="absolute left-[28%] right-[25%] h-5 rounded-full border border-sky-400/50 bg-sky-400/10"/><div className="absolute left-[62%] w-4 h-4 rounded-full bg-white shadow-lg"/></div><p className="text-xs text-slate-300 mt-4">{latest ? "Today's combined research pattern is shown against your learned personal reference." : 'Complete a check-in to begin learning your personal reference.'}</p></div></div></div>
