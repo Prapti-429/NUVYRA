@@ -214,8 +214,8 @@ def review_lab_results(document_id: uuid.UUID, payload: dict = Body(...), db: Se
         unit = str(row.get("unit") or "").strip()[:50]
         range_text = str(row.get("reference_range_text") or "").strip()[:120]
         date_text = str(row.get("collection_date") or "").strip()[:40]
-        if not name or not value_text or not unit or not range_text:
-            raise HTTPException(422, "For every confirmed result, enter the test name, value, unit and range printed on the report.")
+        if not name or not value_text or not unit or not range_text or not date_text:
+            raise HTTPException(422, "For every confirmed result, enter the test name, value, unit, report date and range printed on the report. If a detail is absent, enter Not shown.")
         low_text = str(row.get("reference_low") or "").strip()
         high_text = str(row.get("reference_high") or "").strip()
         numeric_value = _parse_number(value_text)
@@ -232,9 +232,11 @@ def review_lab_results(document_id: uuid.UUID, payload: dict = Body(...), db: Se
             "reference_high": high_text or None, "collection_date": date_text or None,
             "status": status, "verified": True, "explanation": _plain_test_explanation(name),
         })
+    if not confirmed:
+        raise HTTPException(422, "No results were confirmed. Check the original report and tick the entries that match.")
     analysis = dict(doc.analysis or {})
     analysis["confirmed_lab_results"] = confirmed
-    analysis["lab_review_note"] = "You confirmed these entries against the original report. Comparison uses only the reference interval printed by that laboratory. This is not a diagnosis; ranges vary by laboratory and personal context."
+    analysis["lab_review_note"] = "You confirmed these entries against the original report. Comparison uses only the reference interval printed by that laboratory. This is not a diagnosis; ranges vary by laboratory, age, sex and personal context."
     doc.analysis = analysis
     db.commit()
     return {"document_id": str(doc.id), "confirmed_lab_results": confirmed, "message": "Your reviewed entries have been saved."}
