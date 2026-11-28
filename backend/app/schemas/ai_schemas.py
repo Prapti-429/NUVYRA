@@ -1,4 +1,4 @@
-"""Schemas for multimodal longitudinal digital-biomarker inference."""
+"""Schemas for NUVYRA's self-reported personal-pattern check-in."""
 
 from datetime import datetime
 from typing import List, Optional
@@ -8,20 +8,21 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class AIAnalysisRequest(BaseModel):
-    """Features collected during one monitoring session.
+    """Self-reported answers for one daily check-in.
 
-    Sensor modalities are optional so missing or unusable signals do not
-    prevent an observational analysis. Self-report dimensions are also
-    optional context signals and are not clinical assessments.
+    Five 1–5 ratings contribute to the current experimental personal-pattern
+    index. Categorical answers are retained as context only. Legacy sensor
+    fields remain accepted for backwards compatibility but are ignored by the
+    current scoring model and are not collected in the standard check-in.
     """
-    fatigue: float = Field(ge=0, le=10)
+    fatigue: float = Field(ge=1, le=5)
     mood_deviation: float = Field(ge=0, le=1)
     symptom_burden: float = Field(default=0, ge=0, le=1)
-    energy_level: Optional[float] = Field(default=None, ge=0, le=10)
-    sleep_quality: Optional[float] = Field(default=None, ge=0, le=10)
-    stress_level: Optional[float] = Field(default=None, ge=0, le=10)
-    concentration_level: Optional[float] = Field(default=None, ge=0, le=10)
-    physical_comfort: Optional[float] = Field(default=None, ge=0, le=10)
+    energy_level: Optional[float] = Field(default=None, ge=1, le=5)
+    sleep_quality: Optional[float] = Field(default=None, ge=1, le=5)
+    stress_level: Optional[float] = Field(default=None, ge=1, le=5)
+    concentration_level: Optional[float] = Field(default=None, ge=1, le=5)
+    physical_comfort: Optional[float] = Field(default=None, ge=1, le=7)
     appetite_level: Optional[float] = Field(default=None, ge=0, le=10)
     mood_level: Optional[float] = Field(default=None, ge=1, le=5)
     sleep_hours: Optional[float] = Field(default=None, ge=0, le=24)
