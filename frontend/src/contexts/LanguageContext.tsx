@@ -9,7 +9,7 @@ export const APP_LANGUAGES = [
   { value: 'Tamil', label: 'Tamil', native: 'தமிழ்', locale: 'ta' },
 ] as const;
 
-export type AppLanguage = typeof APP_LANGUAGES[number]['value'] | 'French';
+export type AppLanguage = string;
 interface LanguageContextValue { language: AppLanguage; setLanguage: (language: AppLanguage) => void; }
 const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
 const STORAGE_KEY = 'nuvyra_language';
