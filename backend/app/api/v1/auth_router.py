@@ -117,7 +117,7 @@ def forgot_password(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Password reset email is temporarily unavailable. Please try again later.",
         )
-    return {"detail": "If an account exists for that email, a password reset link will be sent shortly. Check your inbox and spam folder."}
+    return {"detail": "If an account exists for that email, a password reset link will be sent shortly."}
 
 
 @router.post(
