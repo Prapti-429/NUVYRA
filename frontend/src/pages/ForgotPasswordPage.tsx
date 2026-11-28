@@ -13,8 +13,29 @@ export const ForgotPasswordPage: React.FC = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(0);
 
   useEffect(() => { void warmBackend(); }, []);
+
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const timer = window.setTimeout(() => setResendCountdown((seconds) => Math.max(0, seconds - 1)), 1000);
+    const handleResend = async () => {
+    if (!email.trim() || resendCountdown > 0 || loading) return;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await apiClient.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
+      setMessage(response.data?.detail || 'If an account exists for that email, a reset link will be sent shortly.');
+      setResendCountdown(15);
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.detail || requestError?.message || 'We could not resend the email. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  return () => window.clearTimeout(timer);
+  }, [resendCountdown]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -44,6 +65,7 @@ export const ForgotPasswordPage: React.FC = () => {
       } else {
         const response = await apiClient.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
         setMessage(response.data?.detail || 'If an account exists for that email, a reset link will be sent shortly.');
+        setResendCountdown(15);
       }
     } catch (requestError: any) {
       setError(requestError?.response?.data?.detail || requestError?.message || 'We could not complete this request. Please try again.');
@@ -92,6 +114,18 @@ export const ForgotPasswordPage: React.FC = () => {
               {loading ? 'Please wait…' : token ? 'Save new password' : 'Send reset link'}
             </button>
           </form>
+          {!token && message && (
+            <div className="text-center space-y-2">
+              <p className="text-xs text-slate-400">Didn't receive the email? Check your spam folder, or request another link.</p>
+              {resendCountdown > 0 ? (
+                <p className="text-sm text-slate-400" aria-live="polite">Resend available in {resendCountdown}s</p>
+              ) : (
+                <button type="button" onClick={handleResend} disabled={loading} className="text-sm font-semibold text-sky-400 hover:text-sky-300 disabled:opacity-50">
+                  {loading ? 'Sending…' : 'Resend reset link'}
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="pt-4 border-t border-slate-800 text-center">
             <Link to="/login" className="text-sm text-sky-400 hover:text-sky-300 font-semibold">Back to sign in</Link>
