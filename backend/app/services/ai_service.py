@@ -20,7 +20,7 @@ from app.db.models.past_history import HealthReminder, MedicalDocument, PastHist
 from app.db.models.user import User
 from app.schemas.ai_schemas import AIAnalysisRequest, AIAnalysisResponse, AIHistoryPoint, AIHistoryResponse, AIContextSummary, BiomarkerFeatureRead
 
-MODEL_NAME = "Nuvyra Multimodal Longitudinal Biomarker Engine"
+MODEL_NAME = "NUVYRA Personal Pattern Engine"
 MODEL_VERSION = "2.4.0"
 # Only self-reported fields currently contribute to the personal-pattern score.
 # Voice is used only for technical capture checks in the client. Camera-derived
@@ -202,7 +202,7 @@ class AIService:
     def _limitations(history_count, missing, quality):
         out = ["Observational research system only; this output is not a diagnosis or treatment recommendation.", "Camera and microphone estimates can be affected by lighting, device position, background noise, language and recording conditions.", "The stability index is experimental and has not been clinically validated."]
         if history_count < 5:
-            out.append("Your personal baseline is still developing; confidence is limited until more usable observations are collected.")
+            out.append("Your personal reference pattern is still developing; comparisons are limited until more usable check-ins are collected.")
         if missing:
             out.append("Unavailable modalities were excluded rather than imputed as normal.")
         if quality < 0.6:
