@@ -204,9 +204,9 @@ class AIService:
         return [n.replace("_", " ") for n, v in sorted(deviations.items(), key=lambda x: x[1], reverse=True)[:4] if v >= 1]
 
     def _recommendations(self, score, trend, quality, missing, context, persistence):
-        out = ["Repeat check-ins under reasonably similar conditions; one session should not be interpreted in isolation."]
+        out = ["Complete check-ins regularly and answer based on your actual experience; one session should not be interpreted in isolation."]
         if quality < 0.6:
-            out.append("Today's information is limited or noisy. A cleaner recording or additional signal groups may improve the next check-in.")
+            out.append("Some required answers are incomplete. Complete every required question before submitting.")
         if missing:
             out.append("Missing signal groups were excluded from the analysis; they were not treated as normal.")
         if persistence == "PERSISTENT_CHANGE":
@@ -217,7 +217,7 @@ class AIService:
 
     @staticmethod
     def _limitations(history_count, missing, quality):
-        out = ["Observational research system only; this output is not a diagnosis or treatment recommendation.", "Camera and microphone estimates can be affected by lighting, device position, background noise, language and recording conditions.", "The stability index is experimental and has not been clinically validated."]
+        out = ["Observational system only; this output is not a diagnosis or treatment recommendation.", "Self-reported answers can be affected by recall, expectations, interpretation of rating scales and temporary circumstances.", "The personal-pattern index is experimental and has not been clinically validated."]
         if history_count < 5:
             out.append("Your personal reference pattern is still developing; comparisons are limited until more usable check-ins are collected.")
         if missing:
