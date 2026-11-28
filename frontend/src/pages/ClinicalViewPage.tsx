@@ -165,7 +165,7 @@ export const ClinicalViewPage: React.FC = () => {
         </div> : <p className="text-sm text-slate-500">No saved patient context is available for the latest observation.</p>}
       </Section>
 
-      <Section title="Multimodal interpretation" subtitle="The model layer explains what contributed to the experimental composite; it does not make a clinical diagnosis.">
+      <Section title="Multimodal interpretation" subtitle="The current pattern index uses self-reported check-in answers only. Audio and video measurements are not included. This is an observational summary, not a clinical diagnosis.">
         <div className="grid lg:grid-cols-2 gap-5">
           <div><h3 className="text-sm font-semibold text-white mb-2">Observed pattern</h3><p className="text-sm leading-6 text-slate-300">{analysis?.explanation || 'No model explanation is available for the latest observation.'}</p></div>
           <div><h3 className="text-sm font-semibold text-white mb-2">Top contributing signals</h3>{analysis?.top_drivers?.length ? <ul className="space-y-2">{analysis.top_drivers.map(x => <li key={x} className="text-sm text-slate-300 flex gap-2"><span className="text-sky-400">•</span>{x}</li>)}</ul> : <p className="text-sm text-slate-500">No contributing signals reported.</p>}</div>
