@@ -1,8 +1,9 @@
 """Self-reported personal-pattern analysis service.
 
 Observational monitoring only. This service never diagnoses disease or makes
-clinical/treatment decisions. Only five required 1–5 self-report ratings enter
-the experimental index; categorical answers remain context only.
+clinical/treatment decisions. Up to five core 1–5 self-report ratings enter
+the experimental index; at least four are required and missing values are
+excluded. Categorical answers remain context only.
 """
 from __future__ import annotations
 from datetime import date, datetime, timezone
@@ -22,7 +23,7 @@ from app.schemas.ai_schemas import AIAnalysisRequest, AIAnalysisResponse, AIHist
 
 MODEL_NAME = "NUVYRA Personal Pattern Engine"
 MODEL_VERSION = "2.5.0"
-# Only five self-reported 1–5 ratings contribute to the current personal-pattern index.
+# Up to five self-reported 1–5 ratings contribute to the current personal-pattern index.
 # Categorical answers remain context only. Legacy voice/camera payload fields are
 # ignored by this model and are not collected in the standard daily check-in.
 FEATURES = (("fatigue", "survey"), ("energy_level", "survey"), ("sleep_quality", "survey"), ("stress_level", "survey"), ("concentration_level", "survey"))
