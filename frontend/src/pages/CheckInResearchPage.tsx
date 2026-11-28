@@ -79,7 +79,7 @@ export const CheckInResearchPage:React.FC=()=>{
    const ctx=canvas.getContext('2d',{willReadFrequently:true});if(!ctx)throw Error('Camera analysis is unavailable.');
    const motion:number[]=[],lum:number[]=[];let prev:Uint8ClampedArray|null=null;const start=performance.now();
    while(performance.now()-start<10000){ctx.drawImage(videoRef.current,0,0,160,120);const p=ctx.getImageData(0,0,160,120).data;let total=0,diff=0;
-    for(let i=0;i<p.length;i+=4){const x=(i/4)%160,y=Math.floor((i/4)/160),v=.2126*p[i]+.7152*p[i+1]+.0722*p[i+2];total+=v;if(prev)diff+=Math.abs(v-(.2126*prev[i]+.7152*prev[i+1]+.0722*prev[i+2]));}
+    for(let i=0;i<p.length;i+=4){const v=.2126*p[i]+.7152*p[i+1]+.0722*p[i+2];total+=v;if(prev)diff+=Math.abs(v-(.2126*prev[i]+.7152*prev[i+1]+.0722*prev[i+2]));}
     motion.push(diff/(160*120*255));lum.push(total/(160*120*255));prev=new Uint8ClampedArray(p);await new Promise(r=>setTimeout(r,200));
    }
    const avgLum=mean(lum),motionVariability=sd(motion);
