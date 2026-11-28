@@ -4,19 +4,22 @@ import { InfoButton } from '../components/common/InfoButton';
 import { aiService, AIAnalysisResponse, AIHistoryPoint } from '../services/aiService';
 
 const explain: Record<string, string> = {
-  voice_pitch_hz: 'How high or low the voice sounds. NUVYRA looks mainly for change from your own usual pattern.',
-  voice_rms: 'A simple measure of sound strength. It is affected by distance from the microphone and background noise.',
-  voice_speech_activity: 'An estimate of how much of the recording contained active speech.',
-  face_motion: 'How much visible image movement was detected between camera frames. It is not a clinical facial test.',
-  face_luminance_variability: 'How much brightness changed in the camera image. Lighting can affect this value.',
-  blink_rate_per_minute: 'A camera-based estimate of blinking. It is not an eye examination.',
-  eye_opening_proxy: 'An estimate of visible eye opening from the camera. It can be affected by lighting and camera position.',
-  gait_motion: 'An estimate of visible movement during a movement check. It is not a clinical gait test.',
-  gait_variability: 'How much the visible movement changed during the sample.',
-  breathing_rate_per_minute: 'A visual estimate of breathing-related rhythm. It is not a medical breathing measurement.',
-  breathing_variability: 'How much the estimated breathing-related pattern varied during the sample.',
-  head_motion: 'An estimate of visible head movement across camera frames.',
-  head_motion_variability: 'How much visible head movement changed during the sample.',
+  fatigue: 'Your own rating of how tired you felt today. It is not a clinical fatigue test.',
+  mood_deviation: 'How different today felt compared with your usual experience. This is your personal description, not a diagnosis.',
+  symptom_burden: 'A simple count of optional observations you selected. It is not a measure of disease severity.',
+  energy_level: 'Your own rating of your energy today.',
+  sleep_quality: 'How restful your sleep felt to you. It is not a sleep-lab measurement.',
+  stress_level: 'Your own rating of how stressed you felt today.',
+  concentration_level: 'Your own rating of how easy it felt to focus today.',
+  physical_comfort: 'The physical-comfort option you selected. It is not an examination.',
+
+
+const featureValue = (name: string, value: number) => {
+  if (name === 'mood_deviation') return value <= .1 ? 'About the same / better' : value < .75 ? 'A little different' : 'Noticeably different';
+  if (name === 'physical_comfort') return ['Comfortable','Muscle stiffness','Tremor sensation','Physical weakness','Pain/discomfort','Shortness of breath','Other'][Math.round(value)-1] || 'Needs review';
+  if (name === 'symptom_burden') return `${Math.round(value * 5)} optional observations selected`;
+  if (['fatigue','energy_level','sleep_quality','stress_level','concentration_level'].includes(name)) return `${Math.round(value)} / 5`;
+  return 'Not available';
 };
 
 const label = (name: string) => name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(' Hz','');
@@ -60,7 +63,7 @@ export const TrendsPage: React.FC = () => {
 
       <section className="rounded-2xl bg-[#111827] border border-slate-800 p-6 sm:p-8"><div className="flex items-center gap-2 mb-3"><h2 className="text-base font-bold text-white">Your personal pattern over time</h2><InfoButton title="Graph">Each point reflects your self-reported check-in answers. A comparison is shown only after enough history exists.</InfoButton></div>{baselineReady && chartData.length ? <TrendChart data={chartData} height={320} label="Personal pattern index" metricUnit="index" /> : <div className="h-60 flex items-center justify-center rounded-xl bg-slate-900/40 border border-slate-800 text-sm text-slate-400">Your personal reference is still building. Complete at least five check-ins to see a comparison.</div>}</section>
 
-      <section className="rounded-2xl bg-[#111827] border border-slate-800 p-6"><div className="flex items-center gap-2 mb-4"><h2 className="text-base font-bold text-white">Latest recorded answers</h2><InfoButton title="Parameters">These are the answers you shared in your check-in. They describe your experience; they are not medical measurements or diagnoses.</InfoButton></div>{features.length ? <div className="grid md:grid-cols-2 gap-3">{features.map(f => <div key={`${f.category}-${f.name}`} className="rounded-xl bg-slate-900 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium text-white">{label(f.name)}</p><p className="text-[11px] text-slate-500 mt-1">{f.category}</p></div><InfoButton title={label(f.name)}>{explain[f.name] || 'This is a numerical signal used by the NUVYRA AI pipeline. It is interpreted mainly against your personal history and data quality.'}</InfoButton></div><div className="mt-3 flex items-end justify-between"><strong className="text-xl text-white">{Number(f.value).toFixed(3)}</strong>{f.deviation !== null && f.deviation !== undefined && <span className="text-xs text-slate-400">change: {Number(f.deviation).toFixed(2)}</span>}</div></div>)}</div> : <p className="text-sm text-slate-500">The latest feature details will appear after a completed AI check-in.</p>}</section>
+      <section className="rounded-2xl bg-[#111827] border border-slate-800 p-6"><div className="flex items-center gap-2 mb-4"><h2 className="text-base font-bold text-white">Latest recorded answers</h2><InfoButton title="Parameters">These are the answers you shared in your check-in. They describe your experience; they are not medical measurements or diagnoses.</InfoButton></div>{features.length ? <div className="grid md:grid-cols-2 gap-3">{features.map(f => <div key={`${f.category}-${f.name}`} className="rounded-xl bg-slate-900 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium text-white">{label(f.name)}</p><p className="text-[11px] text-slate-500 mt-1">Your answer</p></div><InfoButton title={label(f.name)}>{explain[f.name] || 'This is based on the answer you gave in your daily check-in. It is not a diagnosis.'}</InfoButton></div><div className="mt-3 flex items-end justify-between"><strong className="text-sm text-white">{featureValue(f.name, Number(f.value))}</strong></div></div>)}</div> : <p className="text-sm text-slate-500">The latest feature details will appear after a completed AI check-in.</p>}</section>
 
       <section className="rounded-2xl bg-[#111827] border border-slate-800 p-6"><div className="flex items-center gap-2"><h2 className="text-base font-bold text-white">How NUVYRA assesses your data</h2><InfoButton title="AI assessment">NUVYRA checks data quality, handles missing or weak signals, compares usable measurements with your personal baseline, looks for repeated changes and combines available modalities. It produces an observational research signal, not a diagnosis.</InfoButton></div><div className="mt-5 grid md:grid-cols-4 gap-3">{[['1','Quality','Checks whether data is usable.'],['2','Baseline','Learns your own usual pattern.'],['3','Change','Looks for meaningful deviation and persistence.'],['4','Fusion','Combines available signals without pretending missing data exists.']].map(([n,t,d])=><div key={t} className="rounded-xl bg-slate-900 p-4"><span className="text-sky-300 font-semibold">{n}</span><p className="mt-1 font-medium text-white">{t}</p><p className="mt-1 text-xs leading-5 text-slate-500">{d}</p></div>)}</div></section>
     </>}
