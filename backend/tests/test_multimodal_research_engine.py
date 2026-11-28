@@ -40,20 +40,26 @@ def test_missing_modalities_are_not_imputed() -> None:
 
 def test_required_self_report_ranges_are_enforced() -> None:
     engine = service()
-    current = {name: 3.0 for name, _ in FEATURES}
-    assert engine._invalid_required_ranges(current) == {}
-    current["fatigue"] = 6.0
-    current["physical_comfort"] = 8.0
-    invalid = engine._invalid_required_ranges(current)
+    payload = SimpleNamespace(fatigue=3.0, mood_deviation=0.0, energy_level=3.0, sleep_quality=3.0, stress_level=3.0, concentration_level=3.0, physical_comfort=1.0)
+    assert engine._invalid_required_ranges(payload) == {}
+    payload.fatigue = 6.0
+    payload.physical_comfort = 8.0
+    invalid = engine._invalid_required_ranges(payload)
     assert set(invalid) == {"fatigue", "physical_comfort"}
 
 
 def test_required_self_report_completeness_is_bounded() -> None:
     engine = service()
-    payload = SimpleNamespace(source_duration_seconds=20)
-    current = {name: 1.0 for name, _ in FEATURES}
-    complete = engine._quality(current, payload)
-    incomplete = engine._quality({k: v for k, v in current.items() if k != "energy_level"}, payload)
+    current = {name: 3.0 for name, _ in FEATURES}
+    required = {
+        "fatigue": 3.0, "mood_deviation": 0.0, "energy_level": 3.0,
+        "sleep_quality": 3.0, "stress_level": 3.0,
+        "concentration_level": 3.0, "physical_comfort": 1.0,
+    }
+    complete_payload = SimpleNamespace(**required)
+    incomplete_payload = SimpleNamespace(**{k: v for k, v in required.items() if k != "energy_level"})
+    complete = engine._quality(current, complete_payload)
+    incomplete = engine._quality(current, incomplete_payload)
 
     assert complete == 1.0
     assert 0.0 <= incomplete < 1.0
