@@ -1,8 +1,8 @@
 import apiClient from './apiClient';
 
 export interface AIAnalysisRequest {
-  fatigue: number;
-  mood_deviation: number;
+  fatigue?: number;
+  mood_deviation?: number;
   symptom_burden?: number;
   energy_level?: number;
   sleep_quality?: number;
