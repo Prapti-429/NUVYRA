@@ -16,7 +16,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
   const { language } = useLanguage();
   const navigate = useNavigate();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const t = navText[language];
+  const t = navText[language] || navText.English;
   const role = user?.role || 'patient';
   const navigation = role === 'patient'
     ? [{ key:'overview', href:'/dashboard' }, { key:'checkin', href:'/check-in' }, { key:'biomarkers', href:'/biomarkers' }, { key:'trends', href:'/trends' }, { key:'timeline', href:'/timeline' }, { key:'history', href:'/past-history' }, { key:'notifications', href:'/notifications' }, { key:'reports', href:'/reports' }]
