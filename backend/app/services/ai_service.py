@@ -1,8 +1,8 @@
-"""Longitudinal multimodal research inference service.
+"""Self-reported personal-pattern analysis service.
 
 Observational monitoring only. This service never diagnoses disease or makes
-clinical/treatment decisions. Missing and low-quality signals are excluded
-rather than silently converted into normal values.
+clinical/treatment decisions. Only five required 1–5 self-report ratings enter
+the experimental index; categorical answers remain context only.
 """
 from __future__ import annotations
 from datetime import date, datetime, timezone
