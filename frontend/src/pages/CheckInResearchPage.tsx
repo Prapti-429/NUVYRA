@@ -95,10 +95,9 @@ export const CheckInResearchPage: React.FC = () => {
         concentration_level: concentration,
         physical_comfort: PHYSICAL_INDEX[physical] || 1,
         physical_comfort_observation: physical,
-        physical_comfort_notes: physicalNotes,
+        physical_comfort_notes: [physicalNotes, observations.length ? `Other observations selected: ${observations.join(', ')}` : ''].filter(Boolean).join('\n'),
         mood_level: moodLevel,
         mood_deviation: MOOD_DEVIATION[mood] ?? 0,
-        symptom_burden: observations.length / Math.max(1, OBS.English.length),
         source_duration_seconds: 0
       });
       setResult(response);
@@ -191,6 +190,13 @@ export const CheckInResearchPage: React.FC = () => {
     </section>}
 
     {result && <section className="space-y-5">
+      <div className="rounded-3xl border border-slate-800 bg-[#111827] p-5 sm:p-7">
+        <h3 className="font-semibold text-white">What you shared today</h3>
+        <p className="mt-1 text-xs text-slate-400">Your overall feeling and physical-comfort choice are kept as context. They are not turned into numeric index inputs.</p>
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {[['Overall feeling',MOODS.find(item=>item.key===mood)?.title||'Not selected'],['Fatigue',`${fatigue}/5`],['Energy',`${energy}/5`],['Sleep',`${sleep}/5 · ${sleepHours}h`],['Stress',`${stress}/5`],['Concentration',`${concentration}/5`],['Physical comfort',physical],['Waking during night',String(awakenings)]].map(([label,value])=><div key={label} className="rounded-2xl bg-slate-950/60 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 text-sm font-medium text-white">{value}</p></div>)}
+        </div>
+      </div>
       <div className="rounded-3xl border border-slate-800 bg-[#111827] p-5 sm:p-7">
         <p className="text-[11px] uppercase tracking-[0.18em] text-teal-300">Check-in saved</p>
         <h2 className="mt-2 text-xl font-semibold">Your personal picture</h2>
