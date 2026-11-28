@@ -20,21 +20,7 @@ export const ForgotPasswordPage: React.FC = () => {
   useEffect(() => {
     if (resendCountdown <= 0) return;
     const timer = window.setTimeout(() => setResendCountdown((seconds) => Math.max(0, seconds - 1)), 1000);
-    const handleResend = async () => {
-    if (!email.trim() || resendCountdown > 0 || loading) return;
-    setLoading(true);
-    setError('');
-    try {
-      const response = await apiClient.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
-      setMessage(response.data?.detail || 'If an account exists for that email, a reset link will be sent shortly.');
-      setResendCountdown(15);
-    } catch (requestError: any) {
-      setError(requestError?.response?.data?.detail || requestError?.message || 'We could not resend the email. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  return () => window.clearTimeout(timer);
+    return () => window.clearTimeout(timer);
   }, [resendCountdown]);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -69,6 +55,21 @@ export const ForgotPasswordPage: React.FC = () => {
       }
     } catch (requestError: any) {
       setError(requestError?.response?.data?.detail || requestError?.message || 'We could not complete this request. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email.trim() || resendCountdown > 0 || loading) return;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await apiClient.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
+      setMessage(response.data?.detail || 'If an account exists for that email, a reset link will be sent shortly.');
+      setResendCountdown(15);
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.detail || requestError?.message || 'We could not resend the email. Please try again.');
     } finally {
       setLoading(false);
     }
