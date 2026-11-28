@@ -10,7 +10,12 @@ const dateTime = (value?: string) => value ? new Date(value).toLocaleString([], 
 const titleCase = (value: string) => value.replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
 const signalCatalog: Record<string, { domain: string; observed: string; acquisition: string; factors: string; meaning: string; limitation: string }> = {
-
+  fatigue: { domain: 'Daily reflection', observed: 'Self-reported fatigue rating', acquisition: 'Daily check-in answer', factors: 'Sleep, activity, stress, illness, medication, routine and time of day', meaning: 'Records how tired the person says they felt', limitation: 'Not a clinical fatigue test' },
+  energy_level: { domain: 'Daily reflection', observed: 'Self-reported energy rating', acquisition: 'Daily check-in answer', factors: 'Sleep, activity, food, stress and time of day', meaning: 'Records perceived energy', limitation: 'Not an objective energy measurement' },
+  sleep_quality: { domain: 'Daily reflection', observed: 'Self-reported sleep quality', acquisition: 'Daily check-in answer', factors: 'Sleep duration, interruptions, routine and environment', meaning: 'Records how restful sleep felt', limitation: 'Not a sleep study' },
+  stress_level: { domain: 'Daily reflection', observed: 'Self-reported stress rating', acquisition: 'Daily check-in answer', factors: 'Events, environment, emotions and time of day', meaning: 'Records perceived stress', limitation: 'Does not diagnose a mental-health condition' },
+  concentration_level: { domain: 'Daily reflection', observed: 'Self-reported concentration rating', acquisition: 'Daily check-in answer', factors: 'Sleep, distractions, stress, fatigue and task difficulty', meaning: 'Records how easy it felt to focus', limitation: 'Not a cognitive examination' },
+};
 
 const fallbackCatalog = (name: string) => ({ domain: 'Derived feature', observed: titleCase(name), acquisition: 'Daily check-in answer', factors: 'Device, environment, task conditions and individual variability', meaning: 'A self-reported observation intended for within-person review', limitation: 'Experimental research feature; not independently validated for clinical diagnosis' });
 
