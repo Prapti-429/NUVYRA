@@ -57,28 +57,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const initAuth = async () => {
-      const storedToken = localStorage.getItem('nuvyra_token');
-      if (storedToken) {
-        try {
-          const currentUser = await loadCurrentUser();
-          setUser(currentUser);
-          setToken(storedToken);
-        } catch (error: any) {
-          if (error?.status === 401 || error?.code === 'HTTP_401') { clearStoredAuth(); setToken(null); setUser(null); }
-          else {
-            // Keep an already-issued session available during a temporary
-            // network outage; decode only non-sensitive identity claims locally.
-            const tokenUser = decodeAccessTokenUser(storedToken);
-            if (tokenUser) setUser(tokenUser);
-            setToken(storedToken);
-          }
-        }
-      }
-      setIsLoading(false);
-    };
+    let mounted = true;
+    const storedToken = localStorage.getItem('nuvyra_token');
 
-    initAuth();
+    if (!storedToken) {
+      setIsLoading(false);
+      return () => { mounted = false; };
+    }
+
+    // Restore the signed-in shell immediately from the signed token. Verify
+    // the full profile in the background so a sleeping API cannot leave the
+    // app stuck on a full-screen spinner before the user can continue.
+    const tokenUser = decodeAccessTokenUser(storedToken);
+    if (tokenUser) setUser(tokenUser);
+    setToken(storedToken);
+    setIsLoading(false);
+
+    void loadCurrentUser()
+      .then((currentUser) => {
+        if (!mounted) return;
+        setUser(currentUser);
+        setToken(localStorage.getItem('nuvyra_token') || storedToken);
+      })
+      .catch((error: any) => {
+        if (!mounted) return;
+        if (error?.status === 401 || error?.response?.status === 401 || error?.code === 'HTTP_401') {
+          clearStoredAuth();
+          setToken(null);
+          setUser(null);
+        } else if (tokenUser) {
+          setUser(tokenUser);
+        }
+      });
+
+    return () => { mounted = false; };
   }, []);
 
   const login = async (email: string, password: string) => {
