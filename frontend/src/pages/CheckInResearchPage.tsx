@@ -77,17 +77,16 @@ export const CheckInResearchPage:React.FC=()=>{
    if(!videoRef.current||!canvasRef.current)throw Error('Camera preview is unavailable.');
    videoRef.current.srcObject=stream;await videoRef.current.play();const canvas=canvasRef.current;canvas.width=160;canvas.height=120;
    const ctx=canvas.getContext('2d',{willReadFrequently:true});if(!ctx)throw Error('Camera analysis is unavailable.');
-   const motion:number[]=[],lum:number[]=[],head:number[]=[],breath:number[]=[];let prev:Uint8ClampedArray|null=null;const start=performance.now();
-   while(performance.now()-start<10000){ctx.drawImage(videoRef.current,0,0,160,120);const p=ctx.getImageData(0,0,160,120).data;let total=0,diff=0,left=0,right=0,lower=0,n=0;
-    for(let i=0;i<p.length;i+=4){const x=(i/4)%160,y=Math.floor((i/4)/160),v=.2126*p[i]+.7152*p[i+1]+.0722*p[i+2];total+=v;if(x<55)left+=v;if(x>105)right+=v;if(y>65&&x>35&&x<125){lower+=v;n++;}if(prev)diff+=Math.abs(v-(.2126*prev[i]+.7152*prev[i+1]+.0722*prev[i+2]));}
-    motion.push(diff/(160*120*255));lum.push(total/(160*120*255));head.push(Math.abs(left-right)/(160*120*255));breath.push(lower/Math.max(1,n)/255);prev=new Uint8ClampedArray(p);await new Promise(r=>setTimeout(r,200));
+   const motion:number[]=[],lum:number[]=[];let prev:Uint8ClampedArray|null=null;const start=performance.now();
+   while(performance.now()-start<10000){ctx.drawImage(videoRef.current,0,0,160,120);const p=ctx.getImageData(0,0,160,120).data;let total=0,diff=0;
+    for(let i=0;i<p.length;i+=4){const x=(i/4)%160,y=Math.floor((i/4)/160),v=.2126*p[i]+.7152*p[i+1]+.0722*p[i+2];total+=v;if(prev)diff+=Math.abs(v-(.2126*prev[i]+.7152*prev[i+1]+.0722*prev[i+2]));}
+    motion.push(diff/(160*120*255));lum.push(total/(160*120*255));prev=new Uint8ClampedArray(p);await new Promise(r=>setTimeout(r,200));
    }
    const avgLum=mean(lum),motionVariability=sd(motion);
    const lightingScore=clamp(1-Math.abs(avgLum-.45)/.45,0,1),stabilityScore=clamp(1-motionVariability/.12,0,1);
    const qualityScore=Math.round((lightingScore*.5+stabilityScore*.5)*100);
    if(qualityScore<80)throw Error(`Camera recording quality is ${qualityScore}%. NUVYRA requires at least 80% to continue. Please try again: face a soft light source, avoid a bright window behind you, place the camera at eye level, keep your face and shoulders centered, and steady the phone. This score checks lighting and image stability only; it does not assess your health or verify head position.`);
-   const out:Camera={quality_score:qualityScore,face_motion:Number(mean(motion).toFixed(6)),face_luminance_variability:Number(sd(lum).toFixed(6)),head_motion:Number(mean(head).toFixed(6)),head_motion_variability:Number(sd(head).toFixed(6))};
-   const low=mean(breath);out.breathing_variability=Number(sd(breath).toFixed(6));out.breathing_rate_per_minute=Number(Math.max(6,Math.min(30,12+low*10)).toFixed(2));
+   const out:Camera={quality_score:qualityScore};
    setCamera(out);
   }catch(e:any){setError(e?.message||'Camera analysis failed. Please record the camera sample again.');}
   finally{streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setCapturing(false);}
@@ -99,7 +98,7 @@ export const CheckInResearchPage:React.FC=()=>{
   if(!voice){setError('Voice analysis is missing. Please record a usable voice sample before continuing.');setStep(2);return;}
   if(!camera){setError('Camera analysis is missing. Please complete the camera check before continuing.');setStep(3);return;}
   setLoading(true);
-  try{setResult(await aiService.analyze({fatigue,energy_level:energy,sleep_quality:sleep, sleep_hours:sleepHours,sleep_awakenings:awakenings,stress_level:stress,concentration_level:concentration,physical_comfort:PHYSICAL_INDEX[physical]||1,physical_comfort_observation:physical,physical_comfort_notes:physicalNotes,mood_level:moodLevel,mood_deviation:moodMap[mood]??0,symptom_burden:observations.length/6,voice_language:language,voice_rms:voice.rms,voice_zero_crossing_rate:voice.zcr,voice_pitch_hz:voice.pitch,voice_speech_activity:voice.speechActivity,face_motion:camera.face_motion,face_luminance_variability:camera.face_luminance_variability,head_motion:camera.head_motion,head_motion_variability:camera.head_motion_variability,breathing_rate_per_minute:camera.breathing_rate_per_minute,breathing_variability:camera.breathing_variability,source_duration_seconds:voice.duration}));}
+  try{setResult(await aiService.analyze({fatigue,energy_level:energy,sleep_quality:sleep, sleep_hours:sleepHours,sleep_awakenings:awakenings,stress_level:stress,concentration_level:concentration,physical_comfort:PHYSICAL_INDEX[physical]||1,physical_comfort_observation:physical,physical_comfort_notes:physicalNotes,mood_level:moodLevel,mood_deviation:moodMap[mood]??0,symptom_burden:observations.length/6,voice_language:language,voice_rms:voice.rms,voice_zero_crossing_rate:voice.zcr,voice_pitch_hz:voice.pitch,voice_speech_activity:voice.speechActivity,source_duration_seconds:voice.duration}));}
   catch(e:any){if(e?.status===401)navigate('/login');else setError(e?.message||'NUVYRA analysis failed. Please try the check-in again.');}
   finally{setLoading(false);}
  };
