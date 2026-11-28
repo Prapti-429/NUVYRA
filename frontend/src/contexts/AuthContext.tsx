@@ -66,7 +66,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setToken(storedToken);
         } catch (error: any) {
           if (error?.status === 401 || error?.code === 'HTTP_401') { clearStoredAuth(); setToken(null); setUser(null); }
-          else { setToken(storedToken); }
+          else {
+            // Keep an already-issued session available during a temporary
+            // network outage; decode only non-sensitive identity claims locally.
+            const tokenUser = decodeAccessTokenUser(storedToken);
+            if (tokenUser) setUser(tokenUser);
+            setToken(storedToken);
+          }
         }
       }
       setIsLoading(false);
@@ -83,25 +89,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     const { access_token, refresh_token, user: authenticatedUser } = response.data || {};
 
-    if (!access_token) {
-      throw new Error('The server did not return a valid access token.');
+    // Validate the complete response before persisting anything. A partial
+    // response must never leave the UI looking signed in with a broken session.
+    if (!access_token || !authenticatedUser?.id) {
+      throw new Error('Sign-in could not be completed because the server returned an incomplete session. Please try again.');
     }
 
     localStorage.setItem('nuvyra_token', access_token);
     localStorage.setItem('access_token', access_token);
     if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
     setToken(access_token);
-
-    // The backend returns the authenticated profile in the same successful
-    // login response. Do not make a second /auth/me request part of login.
-    // This prevents a profile-query failure from being shown as an
-    // authentication failure.
-    if (authenticatedUser?.id) {
-      setUser(authenticatedUser as User);
-      return;
-    }
-
-    throw new Error('The server authenticated the account but did not return the user profile. Please redeploy the backend and frontend.');
+    setUser(authenticatedUser as User);
   };
 
   const register = async (email: string, password: string, fullName?: string) => {
