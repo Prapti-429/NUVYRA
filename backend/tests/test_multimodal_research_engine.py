@@ -29,7 +29,7 @@ def test_invalid_numeric_values_are_rejected() -> None:
 
 def test_missing_modalities_are_not_imputed() -> None:
     engine = service()
-    current = {"energy_level": 180.0, "voice_rms": 0.2}
+    current = {"voice_pitch_hz": 180.0, "face_motion": 0.2}
     modalities = engine._modalities(current)
     missing = engine._missing(modalities)
 
