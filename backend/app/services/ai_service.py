@@ -21,13 +21,13 @@ from app.db.models.user import User
 from app.schemas.ai_schemas import AIAnalysisRequest, AIAnalysisResponse, AIHistoryPoint, AIHistoryResponse, AIContextSummary, BiomarkerFeatureRead
 
 MODEL_NAME = "NUVYRA Personal Pattern Engine"
-MODEL_VERSION = "2.4.0"
+MODEL_VERSION = "2.5.0"
 # Only self-reported fields currently contribute to the personal-pattern score.
 # Voice is used only for technical capture checks in the client. Camera-derived
 # face, eye, head, gait and breathing estimates are excluded until validated.
-FEATURES = (("fatigue", "survey"), ("mood_deviation", "survey"), ("symptom_burden", "survey"), ("energy_level", "survey"), ("sleep_quality", "survey"), ("stress_level", "survey"), ("concentration_level", "survey"), ("physical_comfort", "survey"))
+FEATURES = (("fatigue", "survey"), ("energy_level", "survey"), ("sleep_quality", "survey"), ("stress_level", "survey"), ("concentration_level", "survey"))
 MODALITY_NAMES = ["survey"]
-REQUIRED_SCORE_FIELDS = ("fatigue", "mood_deviation", "energy_level", "sleep_quality", "stress_level", "concentration_level", "physical_comfort")
+REQUIRED_CHECKIN_FIELDS = ("fatigue", "mood_deviation", "energy_level", "sleep_quality", "stress_level", "concentration_level", "physical_comfort")
 
 class AIService:
     def __init__(self, db: Session) -> None:
@@ -120,12 +120,13 @@ class AIService:
 
     def _quality(self, current: Dict[str, float], payload: AIAnalysisRequest) -> float:
         # Completeness of required self-report fields, not clinical accuracy.
-        present = sum(1 for name in REQUIRED_SCORE_FIELDS if name in current)
-        return round(present / len(REQUIRED_SCORE_FIELDS), 3)
+        present = sum(1 for name in REQUIRED_CHECKIN_FIELDS if getattr(payload, name, None) is not None)
+        return round(present / len(REQUIRED_CHECKIN_FIELDS), 3)
 
-    def _invalid_required_ranges(self, current: Dict[str, float]) -> Dict[str, float]:
+    def _invalid_required_ranges(self, payload: AIAnalysisRequest) -> Dict[str, float]:
         ranges = {
             "fatigue": (1.0, 5.0),
+            "mood_deviation": (0.0, 1.0),
             "energy_level": (1.0, 5.0),
             "sleep_quality": (1.0, 5.0),
             "stress_level": (1.0, 5.0),
@@ -133,9 +134,10 @@ class AIService:
             "physical_comfort": (1.0, 7.0),
         }
         return {
-            name: current[name]
+            name: float(getattr(payload, name))
             for name, (minimum, maximum) in ranges.items()
-            if name in current and not minimum <= current[name] <= maximum
+            if getattr(payload, name, None) is not None
+            and not minimum <= float(getattr(payload, name)) <= maximum
         }
 
     def _model_score(self, current: Dict[str, float], history_features: List[Dict[str, float]]):
@@ -227,7 +229,7 @@ class AIService:
     def analyze(self, user_id: UUID, payload: AIAnalysisRequest) -> AIAnalysisResponse:
         current = self._vector(payload)
         quality = self._quality(current, payload)
-        invalid_ranges = self._invalid_required_ranges(current)
+        invalid_ranges = self._invalid_required_ranges(payload)
         if invalid_ranges:
             raise HTTPException(
                 status_code=422,
@@ -237,7 +239,7 @@ class AIService:
                 },
             )
         if quality < 1.0:
-            missing_fields = [name for name in REQUIRED_SCORE_FIELDS if name not in current]
+            missing_fields = [name for name in REQUIRED_CHECKIN_FIELDS if getattr(payload, name, None) is None]
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -258,7 +260,9 @@ class AIService:
         drivers = self._drivers(deviations)
         recommendations = self._recommendations(score, trend, quality, missing, context, persistence)
         limitations = self._limitations(len(history), missing, quality)
-        limitations.append("The numerical pattern score currently uses self-reported check-in answers only. Voice recordings are not treated as medical evidence.")
+        limitations.append("The numerical personal-pattern index uses five self-reported 1–5 ratings only: fatigue, energy, sleep quality, stress and concentration.")
+        limitations.append("Overall feeling and physical-comfort choices are kept as context and are not converted into numeric index inputs.")
+        limitations.append("Voice and camera measurements are not collected in the standard check-in and are not used in the index.")
         limitations.append("Camera-derived face, eye, head, gait and breathing measurements are excluded because validated measurement methods are not enabled.")
         if context.document_count:
             limitations.append("Uploaded records and extracted document summaries are shown as background context; their laboratory values are not yet incorporated into the numerical pattern score.")
@@ -274,7 +278,7 @@ class AIService:
                 value = current[name]
                 self.db.add(BiomarkerFeature(check_in_id=check_in.id, feature_name=name, feature_category=category, feature_value=value, source_modality=category, extracted_at=now, extra_properties={"model_version":MODEL_VERSION,"research_proxy":category in {"breathing","facial_dynamics","eye","gait_movement","head_movement"}}))
                 feature_reads.append(BiomarkerFeatureRead(name=name, category=category, value=value, deviation=deviations.get(name)))
-        metadata = {"model_name":MODEL_NAME,"model_version":MODEL_VERSION,"algorithm":algorithm,"baseline_observations":len(history) + 1,"data_quality_score":quality,"modalities_present":modalities,"missing_modalities":missing,"top_drivers":drivers,"recommendations":recommendations,"limitations":limitations,"persistence_signal":persistence,"source_duration_seconds":payload.source_duration_seconds,"voice_language":payload.voice_language,"context":context.model_dump()}
+        metadata = {"model_name":MODEL_NAME,"model_version":MODEL_VERSION,"algorithm":algorithm,"baseline_observations":len(history) + 1,"data_quality_score":quality,"modalities_present":modalities,"missing_modalities":missing,"top_drivers":drivers,"recommendations":recommendations,"limitations":limitations,"persistence_signal":persistence,"source_duration_seconds":payload.source_duration_seconds,"self_report_context":{"mood_deviation":payload.mood_deviation,"mood_level":payload.mood_level,"physical_comfort":payload.physical_comfort,"physical_comfort_observation":payload.physical_comfort_observation,"physical_comfort_notes":payload.physical_comfort_notes,"sleep_hours":payload.sleep_hours,"sleep_awakenings":payload.sleep_awakenings,"optional_observation_fraction":payload.symptom_burden},"context":context.model_dump()}
         self.db.add(HealthStabilityScore(check_in_id=check_in.id, overall_score=round(score,2), trend_category=trend, confidence=round(confidence,3), generated_at=now, explanation_summary=explanation, model_metadata=metadata))
         from app.api.v1.past_history_router import _reward_completed_check_in
         reward = _reward_completed_check_in(self.db, self.db.get(User, user_id), date.today())
