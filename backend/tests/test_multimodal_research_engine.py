@@ -1,9 +1,9 @@
-"""Regression tests for the non-clinical multimodal research engine.
+"""Regression tests for the non-clinical self-report personal-pattern engine.
 
 These tests deliberately exercise the safety-critical invariants of the
 research inference layer without requiring a database:
 - invalid numeric values are rejected;
-- missing modalities are excluded rather than imputed as normal;
+- unsupported sensor modalities are excluded rather than imputed as normal;
 - short histories are reported as insufficient for persistence claims;
 - repeated deviations can be classified as persistent change;
 - data-quality scoring remains bounded.
