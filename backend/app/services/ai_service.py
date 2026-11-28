@@ -91,6 +91,8 @@ class AIService:
                     "dates": list(analysis.get("dates_found") or [])[:20],
                     "follow_up_mentions": list(ai.get("follow_up_mentions") or [])[:20],
                     "summary": str(ai.get("summary") or "")[:500],
+                    # Only user-confirmed rows enter report context; candidates remain excluded.
+                    "confirmed_lab_results": list(analysis.get("confirmed_lab_results") or [])[:100],
                 })
         if pending:
             used.append("pending document/test reminders")
@@ -265,7 +267,7 @@ class AIService:
         limitations.append("Overall feeling and physical-comfort choices are kept as context and are not converted into numeric index inputs.")
         limitations.append("Voice and camera measurements are not collected in the standard check-in and are not used in the index.")
         if context.document_count:
-            limitations.append("Uploaded records and extracted document summaries are shown as background context; their laboratory values are not yet incorporated into the numerical pattern score.")
+            limitations.append("Uploaded documents and user-confirmed laboratory entries are available as background context for the report. They are not inputs to the numerical personal-pattern index, and they do not establish a diagnosis.")
         now = datetime.now(timezone.utc)
         description = 'broadly consistent' if score >= 80 else 'moderately different' if score >= 60 else 'substantially different'
         explanation = f"The five self-reported answers in this check-in are {description} from the personal baseline. NUVYRA compares these answers with earlier check-ins and looks for changes that appear repeatedly over time. Persistence: {persistence}. This is an experimental personal comparison, not a diagnosis or a measure of medical accuracy."
