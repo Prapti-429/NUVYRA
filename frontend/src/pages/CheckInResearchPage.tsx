@@ -42,8 +42,8 @@ export const CheckInResearchPage: React.FC = () => {
   const [energy, setEnergy] = useState<number | null>(null);
   const [fatigue, setFatigue] = useState<number | null>(null);
   const [sleep, setSleep] = useState<number | null>(null);
-  const [sleepHours, setSleepHours] = useState(8);
-  const [awakenings, setAwakenings] = useState(0);
+  const [sleepHours, setSleepHours] = useState<number | null>(null);
+  const [awakenings, setAwakenings] = useState<number | null>(null);
   const [concentration, setConcentration] = useState<number | null>(null);
   const [stress, setStress] = useState<number | null>(null);
   const [physical, setPhysical] = useState('');
@@ -62,15 +62,15 @@ export const CheckInResearchPage: React.FC = () => {
 
   const coreAnswered = [energy, fatigue, sleep, concentration, stress].filter(value => value !== null).length;
   const validateSurvey = () => {
-    if (coreAnswered < 4) {
-      setError('Please choose an answer for at least 4 of the 5 core reflections. You can select “Not sure today” for the one you cannot answer.');
+    if (coreAnswered < 5) {
+      setError('Your check-in is not ready yet. Please answer all five core reflections. If you cannot answer one accurately today, pause and return when you can.');
       return false;
     }
     if (![energy, fatigue, sleep, concentration, stress, moodLevel].every(value => value === null || (Number.isFinite(value) && value >= 1 && value <= 5))) {
       setError('Please check your selected ratings. Each rating must be between 1 and 5.');
       return false;
     }
-    if (!Number.isFinite(sleepHours) || sleepHours < 0 || sleepHours > 24 || !Number.isInteger(awakenings) || awakenings < 0 || awakenings > 30) {
+    if ((sleepHours !== null && (!Number.isFinite(sleepHours) || sleepHours < 0 || sleepHours > 24)) || (awakenings !== null && (!Number.isInteger(awakenings) || awakenings < 0 || awakenings > 30))) {
       setError('Please check your sleep hours and number of awakenings.');
       return false;
     }
@@ -95,8 +95,8 @@ export const CheckInResearchPage: React.FC = () => {
         ...(moodLevel !== null ? { mood_level: moodLevel } : {}),
         ...(mood ? { mood_deviation: MOOD_DEVIATION[mood] ?? 0 } : {}),
         ...(physical ? { physical_comfort: PHYSICAL_INDEX[physical], physical_comfort_observation: physical } : {}),
-        sleep_hours: sleepHours,
-        sleep_awakenings: awakenings,
+        ...(sleepHours !== null ? { sleep_hours: sleepHours } : {}),
+        ...(awakenings !== null ? { sleep_awakenings: awakenings } : {}),
         physical_comfort_notes: [physicalNotes, observations.length ? `Other observations selected: ${observations.join(', ')}` : ''].filter(Boolean).join('\n'),
         source_duration_seconds: 0
       });
@@ -148,7 +148,7 @@ export const CheckInResearchPage: React.FC = () => {
       </div>
 
       <div className="rounded-3xl border border-slate-800 bg-[#111827] p-5 sm:p-7">
-        <div className="mb-5"><h2 className="text-lg font-semibold">A few quick reflections</h2><p className="mt-1 text-xs text-slate-400">Choose the tile that feels closest. No need to overthink it; one core reflection may be left as “Not sure today”.</p><div className="mt-3 rounded-xl border border-sky-500/20 bg-sky-500/5 p-3"><div className="flex items-center justify-between text-xs"><span className="text-slate-300">Core reflections answered</span><strong className="text-sky-300">{coreAnswered} / 5</strong></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-teal-300 transition-all" style={{ width: `${coreAnswered / 5 * 100}%` }} /></div><p className="mt-2 text-[11px] text-slate-500">At least 4 are needed to save. This checks completeness, not accuracy.</p></div></div>
+        <div className="mb-5"><h2 className="text-lg font-semibold">A few quick reflections</h2><p className="mt-1 text-xs text-slate-400">Choose the tile that feels closest. Choose the answer that best matches your experience. All five core reflections are needed before this check-in can be saved.</p><div className="mt-3 rounded-xl border border-sky-500/20 bg-sky-500/5 p-3"><div className="flex items-center justify-between text-xs"><span className="text-slate-300">Core reflections answered</span><strong className="text-sky-300">{coreAnswered} / 5</strong></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-teal-300 transition-all" style={{ width: `${coreAnswered / 5 * 100}%` }} /></div><p className="mt-2 text-[11px] text-slate-500">All 5 are required to continue. This checks that every field is filled—not whether an answer is medically accurate.</p></div></div>
         <div className="grid sm:grid-cols-2 gap-x-7 gap-y-5">
           {ratingLabels.map(([label, value, setter, words], index) => {
             const isCore = index < 5;
@@ -157,13 +157,13 @@ export const CheckInResearchPage: React.FC = () => {
               <div className="mt-3 grid grid-cols-5 gap-1">
                 {words.map((word, optionIndex) => <button key={word} type="button" aria-pressed={value === optionIndex + 1} onClick={() => setter(optionIndex + 1)} className={`min-w-0 rounded-xl border px-1 py-2 text-center transition ${value === optionIndex + 1 ? 'border-sky-400 bg-sky-400/15 text-sky-200' : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-600'}`}><span className="block text-sm font-semibold">{optionIndex + 1}</span><span className="mt-1 block truncate text-[9px]">{word}</span></button>)}
               </div>
-              <button type="button" onClick={() => setter(null)} className={`mt-2 text-[11px] underline underline-offset-2 ${value === null ? 'text-sky-300' : 'text-slate-500 hover:text-slate-300'}`}>{isCore ? 'Not sure today' : 'Skip this'}</button>
+              <button type="button" onClick={() => setter(null)} className={`mt-2 text-[11px] underline underline-offset-2 ${value === null ? 'text-sky-300' : 'text-slate-500 hover:text-slate-300'}`}>{isCore ? 'Clear answer' : 'Skip this'}</button>
             </div>;
           })}
         </div>
         <div className="mt-6 grid sm:grid-cols-2 gap-4">
-          <label className="block"><span className="text-sm text-slate-300">Hours slept</span><input aria-label="Hours slept" className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 p-3 text-white" type="number" min="0" max="24" step="0.5" value={sleepHours} onChange={event => setSleepHours(Number(event.target.value))} /></label>
-          <label className="block"><span className="text-sm text-slate-300">Times you woke up</span><input aria-label="Times you woke up" className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 p-3 text-white" type="number" min="0" max="30" value={awakenings} onChange={event => setAwakenings(Number(event.target.value))} /></label>
+          <label className="block"><span className="text-sm text-slate-300">Hours slept <span className="text-xs text-slate-500">(optional)</span></span><input aria-label="Hours slept" className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 p-3 text-white" type="number" min="0" max="24" step="0.5" value={sleepHours ?? ''} onChange={event => setSleepHours(event.target.value === '' ? null : Number(event.target.value))} /></label>
+          <label className="block"><span className="text-sm text-slate-300">Times you woke up <span className="text-xs text-slate-500">(optional)</span></span><input aria-label="Times you woke up" className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 p-3 text-white" type="number" min="0" max="30" value={awakenings ?? ''} onChange={event => setAwakenings(event.target.value === '' ? null : Number(event.target.value))} /></label>
         </div>
       </div>
 
@@ -188,9 +188,9 @@ export const CheckInResearchPage: React.FC = () => {
     {step === 2 && !result && <section className="rounded-3xl border border-slate-800 bg-[#111827] p-5 sm:p-7 space-y-5">
       <div><p className="text-[11px] uppercase tracking-[0.18em] text-teal-300">Almost there</p><h2 className="mt-2 text-xl font-semibold">Your check-in, at a glance</h2><p className="mt-1 text-sm text-slate-400">Take a quick look before saving. You can go back and change anything.</p></div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {[['Today felt', MOODS.find(item => item.key === mood)?.title || 'Not provided'], ['Energy', energy === null ? 'Not answered' : `${energy}/5`], ['Fatigue', fatigue === null ? 'Not answered' : `${fatigue}/5`], ['Sleep', `${sleep === null ? 'Not answered' : `${sleep}/5`} · ${sleepHours}h`], ['Stress', stress === null ? 'Not answered' : `${stress}/5`], ['Physical comfort', physical]].map(([label, value]) => <div key={label} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 text-sm font-medium text-white">{value}</p></div>)}
+        {[['Today felt', MOODS.find(item => item.key === mood)?.title || 'Not provided'], ['Energy', energy === null ? 'Not answered' : `${energy}/5`], ['Fatigue', fatigue === null ? 'Not answered' : `${fatigue}/5`], ['Sleep', `${sleep === null ? 'Not answered' : `${sleep}/5`}${sleepHours === null ? '' : ` · ${sleepHours}h`}`], ['Stress', stress === null ? 'Not answered' : `${stress}/5`], ['Physical comfort', physical]].map(([label, value]) => <div key={label} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 text-sm font-medium text-white">{value}</p></div>)}
       </div>
-      <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4"><p className="text-sm text-slate-200">NUVYRA compares the answers you choose to share with your own earlier check-ins. At least 4 of 5 core reflections must be supplied. This is a completeness check, not a measure of truth or medical accuracy. No microphone or camera recording is used in this version.</p></div>
+      <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4"><p className="text-sm text-slate-200">NUVYRA compares the answers you choose to share with your own earlier check-ins. All five core reflections must be answered before saving. This is a completeness check—not proof that answers are medically accurate. NUVYRA does not request microphone or camera recordings in this version.</p></div>
       <div className="grid sm:grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="rounded-2xl border border-slate-700 py-3 text-sm font-semibold text-slate-200">Back to edit</button><button type="button" disabled={loading} onClick={analyze} className="rounded-2xl bg-gradient-to-r from-sky-400 to-teal-300 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50">{loading ? 'Saving your check-in…' : 'Save check-in'}</button></div>
     </section>}
 
@@ -199,7 +199,7 @@ export const CheckInResearchPage: React.FC = () => {
         <h3 className="font-semibold text-white">What you shared today</h3>
         <p className="mt-1 text-xs text-slate-400">Your overall feeling and physical-comfort choice are kept as context. They are not turned into numeric index inputs.</p>
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {[['Overall feeling',MOODS.find(item=>item.key===mood)?.title||'Not provided'],['Fatigue',fatigue===null?'Not answered':`${fatigue}/5`],['Energy',energy===null?'Not answered':`${energy}/5`],['Sleep',`${sleep===null?'Not answered':`${sleep}/5`} · ${sleepHours}h`],['Stress',stress===null?'Not answered':`${stress}/5`],['Concentration',concentration===null?'Not answered':`${concentration}/5`],['Physical comfort',physical||'Not provided'],['Waking during night',String(awakenings)]].map(([label,value])=><div key={label} className="rounded-2xl bg-slate-950/60 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 text-sm font-medium text-white">{value}</p></div>)}
+          {[['Overall feeling',MOODS.find(item=>item.key===mood)?.title||'Not provided'],['Fatigue',fatigue===null?'Not answered':`${fatigue}/5`],['Energy',energy===null?'Not answered':`${energy}/5`],['Sleep',`${sleep===null?'Not answered':`${sleep}/5`}${sleepHours === null ? '' : ` · ${sleepHours}h`}`],['Stress',stress===null?'Not answered':`${stress}/5`],['Concentration',concentration===null?'Not answered':`${concentration}/5`],['Physical comfort',physical||'Not provided'],['Waking during night',(awakenings === null ? 'Not provided' : String(awakenings))]].map(([label,value])=><div key={label} className="rounded-2xl bg-slate-950/60 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 text-sm font-medium text-white">{value}</p></div>)}
         </div>
       </div>
       <div className="rounded-3xl border border-slate-800 bg-[#111827] p-5 sm:p-7">
