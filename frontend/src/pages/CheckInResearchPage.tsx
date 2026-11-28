@@ -25,7 +25,6 @@ const OBS:Record<AppLanguage,string[]>={
 const moodMap:Record<string,number>={better:.1,same:0,different:.5,significant:1};
 const mean=(a:number[])=>a.reduce((x,y)=>x+y,0)/Math.max(1,a.length);
 const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n));
-const sd=(a:number[])=>{const m=mean(a);return Math.sqrt(mean(a.map(x=>(x-m)**2)));};
 
 function mediaAccessError(error:unknown,kind:'microphone'|'camera'):string{
  const name=error instanceof DOMException?error.name:(error as {name?:string})?.name||'';
