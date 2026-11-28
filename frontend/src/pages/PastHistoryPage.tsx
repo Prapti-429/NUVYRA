@@ -21,9 +21,9 @@ const explainTest = (raw: string) => {
   if (/glucose|blood sugar/.test(name)) return 'This measures the amount of glucose, a type of sugar, in the blood at the time of the sample.';
   if (/creatinine/.test(name)) return 'Creatinine is a waste product used with other information to assess kidney filtering.';
   if (/egfr|estimated glomerular/.test(name)) return 'eGFR is an estimate of how well the kidneys filter blood.';
-  if (/urea|\\bbun\\b/.test(name)) return 'Urea is a waste product measured as one part of assessing kidney function and hydration context.';
-  if (/\\balt\\b|alanine aminotransferase/.test(name)) return 'ALT is an enzyme often measured when checking for liver-cell irritation or injury.';
-  if (/\\bast\\b|aspartate aminotransferase/.test(name)) return 'AST is an enzyme found in several tissues and is often reviewed with other liver-related tests.';
+  if (/urea|\bbun\b/.test(name)) return 'Urea is a waste product measured as one part of assessing kidney function and hydration context.';
+  if (/\balt\b|alanine aminotransferase/.test(name)) return 'ALT is an enzyme often measured when checking for liver-cell irritation or injury.';
+  if (/\bast\b|aspartate aminotransferase/.test(name)) return 'AST is an enzyme found in several tissues and is often reviewed with other liver-related tests.';
   if (/bilirubin/.test(name)) return 'Bilirubin is produced as red blood cells are broken down and is processed by the liver.';
   if (/tsh|thyroid stimulating/.test(name)) return 'TSH is a hormone that signals the thyroid gland to make thyroid hormones.';
   if (/free t4|thyroxine/.test(name)) return 'T4 is a thyroid hormone involved in regulating how the body uses energy.';
