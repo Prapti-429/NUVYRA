@@ -15,8 +15,8 @@ class AIAnalysisRequest(BaseModel):
     fields remain accepted for backwards compatibility but are ignored by the
     current scoring model and are not collected in the standard check-in.
     """
-    fatigue: float = Field(ge=1, le=5)
-    mood_deviation: float = Field(ge=0, le=1)
+    fatigue: Optional[float] = Field(default=None, ge=1, le=5)
+    mood_deviation: Optional[float] = Field(default=None, ge=0, le=1)
     symptom_burden: float = Field(default=0, ge=0, le=1)
     energy_level: Optional[float] = Field(default=None, ge=1, le=5)
     sleep_quality: Optional[float] = Field(default=None, ge=1, le=5)
