@@ -1,192 +1,216 @@
-import React,{useEffect,useRef,useState} from 'react';
-import {useNavigate} from 'react-router-dom';
-import {aiService,AIAnalysisResponse} from '../services/aiService';
-import {InfoButton} from '../components/common/InfoButton';
-import {useLanguage,AppLanguage,APP_LANGUAGES} from '../contexts/LanguageContext';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { aiService, AIAnalysisResponse } from '../services/aiService';
+import { InfoButton } from '../components/common/InfoButton';
+import { useLanguage, AppLanguage } from '../contexts/LanguageContext';
 
-type Voice={rms:number;zcr:number;pitch:number;speechActivity:number;duration:number;qualityScore:number};
-type Camera=Record<string,number>;
-
-const PROMPTS:Record<AppLanguage,string[]>={
- English:['Describe your day naturally for 20 seconds.','Tell us about one thing you did today.','Describe something you noticed today.'],
- Hindi:['अपने दिन के बारे में 20 सेकंड तक सामान्य तरीके से बताइए।','आज आपने क्या किया, उसके बारे में बताइए।','आज आपने क्या खास देखा? सामान्य तरीके से बताइए।'],
- French:['Décrivez naturellement votre journée pendant 20 secondes.','Parlez-nous d’une chose que vous avez faite aujourd’hui.','Décrivez quelque chose que vous avez remarqué aujourd’hui.']
+const PHYSICAL: Record<AppLanguage, string[]> = {
+  English: ['Comfortable', 'Muscle stiffness', 'Tremor sensation', 'Physical weakness', 'Pain/discomfort', 'Shortness of breath', 'Other'],
+  Hindi: ['आरामदायक', 'मांसपेशियों में जकड़न', 'कंपन जैसा महसूस होना', 'शारीरिक कमजोरी', 'दर्द/असहजता', 'सांस लेने में तकलीफ', 'अन्य'],
+  French: ['À l’aise', 'Raideur musculaire', 'Sensation de tremblement', 'Faiblesse physique', 'Douleur/inconfort', 'Essoufflement', 'Autre'],
+  Bengali: ['স্বস্তিতে', 'পেশিতে শক্তভাব', 'কাঁপার অনুভূতি', 'শারীরিক দুর্বলতা', 'ব্যথা/অস্বস্তি', 'শ্বাসকষ্ট', 'অন্যান্য'],
+  Marathi: ['आरामदायक', 'स्नायूंमध्ये कडकपणा', 'कंप जाणवणे', 'शारीरिक अशक्तपणा', 'वेदना/अस्वस्थता', 'श्वास घेण्यास त्रास', 'इतर'],
+  Telugu: ['సౌకర్యంగా ఉంది', 'కండరాల బిగుతు', 'వణుకు అనుభూతి', 'శారీరక బలహీనత', 'నొప్పి/అసౌకర్యం', 'శ్వాస తీసుకోవడంలో ఇబ్బంది', 'ఇతర']
 };
-const PHYSICAL:Record<AppLanguage,string[]>={
- English:['Comfortable','Muscle stiffness','Tremor sensation','Physical weakness','Pain/discomfort','Shortness of breath','Other'],
- Hindi:['आरामदायक','मांसपेशियों में जकड़न','कंपन जैसा महसूस होना','शारीरिक कमजोरी','दर्द/असहजता','सांस लेने में तकलीफ','अन्य'],
- French:['Confortable','Raideur musculaire','Sensation de tremblement','Faiblesse physique','Douleur/inconfort','Essoufflement','Autre']
+const PHYSICAL_OPTIONS_EN = ['Comfortable', 'Muscle stiffness', 'Tremor sensation', 'Physical weakness', 'Pain/discomfort', 'Shortness of breath', 'Other'];
+const OBS: Record<AppLanguage, string[]> = {
+  English: ['Vocal strain', 'Muscle stiffness', 'Tremor sensation', 'Brain fog', 'Sleep disruption'],
+  Hindi: ['आवाज़ में खिंचाव', 'मांसपेशियों में जकड़न', 'कंपन जैसा महसूस होना', 'मानसिक धुंधलापन', 'नींद में बदलाव'],
+  French: ['Fatigue vocale', 'Raideur musculaire', 'Sensation de tremblement', 'Brouillard mental', 'Perturbation du sommeil'],
+  Bengali: ['কণ্ঠে চাপ', 'পেশিতে শক্তভাব', 'কাঁপার অনুভূতি', 'মনোযোগে ঝাপসাভাব', 'ঘুমের ব্যাঘাত'],
+  Marathi: ['आवाजात ताण', 'स्नायूंमध्ये कडकपणा', 'कंप जाणवणे', 'विचारांत धूसरपणा', 'झोपेत बदल'],
+  Telugu: ['గొంతులో ఒత్తిడి', 'కండరాల బిగుతు', 'వణుకు అనుభూతి', 'మనసు మబ్బుగా ఉండటం', 'నిద్రలో మార్పు']
 };
-const OBS:Record<AppLanguage,string[]>={
- English:['Vocal strain','Motor stiffness','Tremor sensations','Facial tightness','Brain fog','Sleep disruption'],
- Hindi:['आवाज़ में खिंचाव','शारीरिक जकड़न','कंपन जैसा महसूस होना','चेहरे में खिंचाव','मानसिक धुंधलापन','नींद में बदलाव'],
- French:['Fatigue vocale','Raideur des mouvements','Sensation de tremblement','Tension du visage','Brouillard mental','Perturbation du sommeil']
+const MOODS = [
+  { key: 'better', title: 'Better than usual', icon: '↗', hint: 'Today feels easier' },
+  { key: 'same', title: 'About the same', icon: '○', hint: 'Much like a usual day' },
+  { key: 'different', title: 'A little different', icon: '◌', hint: 'Some things feel changed' },
+  { key: 'significant', title: 'Noticeably different', icon: '✳', hint: 'A clear change for you' }
+];
+const MOOD_DEVIATION: Record<string, number> = { better: 0.1, same: 0, different: 0.5, significant: 1 };
+const PHYSICAL_INDEX: Record<string, number> = {
+  Comfortable: 1, 'Muscle stiffness': 2, 'Tremor sensation': 3,
+  'Physical weakness': 4, 'Pain/discomfort': 5, 'Shortness of breath': 6, Other: 7
 };
-const moodMap:Record<string,number>={better:.1,same:0,different:.5,significant:1};
-const mean=(a:number[])=>a.reduce((x,y)=>x+y,0)/Math.max(1,a.length);
-const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n));
 
-function mediaAccessError(error:unknown,kind:'microphone'|'camera'):string{
- const name=error instanceof DOMException?error.name:(error as {name?:string})?.name||'';
- const device=kind==='microphone'?'microphone':'camera';
- if(!window.isSecureContext)return 'NUVYRA cannot access the '+device+' because this page is not running in a secure context. Open the official HTTPS app address or the installed NUVYRA app, then try again.';
- if(!navigator.mediaDevices?.getUserMedia)return 'This browser or in-app WebView does not provide media access. Update Chrome/Android System WebView, close and reopen NUVYRA, or try the HTTPS website in Chrome.';
- if(name==='NotAllowedError'||name==='PermissionDeniedError'||name==='SecurityError')return 'NUVYRA does not have permission to use your '+device+'. In your browser, open the site settings for NUVYRA and set '+device+' to Allow, then reload the app. On Android, open Settings → Apps → NUVYRA → Permissions and allow '+device+'. If you previously blocked the request, change it in Settings rather than repeatedly tapping Record.';
- if(name==='NotFoundError'||name==='DevicesNotFoundError')return 'No usable '+device+' was found. Connect or enable a '+device+' and try again.';
- if(name==='NotReadableError'||name==='TrackStartError')return 'Your '+device+' may already be in use by another app, or the operating system could not start it. Close camera/voice apps and browser tabs using it, then try again.';
- if(name==='OverconstrainedError'||name==='ConstraintNotSatisfiedError')return 'The available '+device+' does not support the requested settings. Try another camera or device.';
- if(name==='AbortError')return 'The '+device+' could not start. Close and reopen NUVYRA and try again.';
- return 'NUVYRA could not start the '+device+'. Check that the device is connected, the app has permission, and no other app is using it. Details: '+(error instanceof Error?error.message:'unknown media error');
-}
+export const CheckInResearchPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { language } = useLanguage();
+  const [step, setStep] = useState(1);
+  const [mood, setMood] = useState('');
+  const [moodLevel, setMoodLevel] = useState(3);
+  const [energy, setEnergy] = useState(3);
+  const [fatigue, setFatigue] = useState(3);
+  const [sleep, setSleep] = useState(3);
+  const [sleepHours, setSleepHours] = useState(8);
+  const [awakenings, setAwakenings] = useState(0);
+  const [concentration, setConcentration] = useState(3);
+  const [stress, setStress] = useState(3);
+  const [physical, setPhysical] = useState('');
+  const [physicalNotes, setPhysicalNotes] = useState('');
+  const [observations, setObservations] = useState<string[]>([]);
+  const [result, setResult] = useState<AIAnalysisResponse | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-async function requestMedia(kind:'microphone'|'camera',constraints:MediaStreamConstraints):Promise<MediaStream>{
- if(!window.isSecureContext)throw new Error(mediaAccessError(new Error('Insecure context'),kind));
- if(!navigator.mediaDevices?.getUserMedia)throw new Error(mediaAccessError(new Error('getUserMedia unavailable'),kind));
- try{return await navigator.mediaDevices.getUserMedia(constraints);}
- catch(error){throw new Error(mediaAccessError(error,kind));}
-}
+  const physicalLabels = PHYSICAL[language] || PHYSICAL.English;
+  const observationLabels = OBS[language] || OBS.English;
+  const physicalIndex = PHYSICAL_OPTIONS_EN.indexOf(physical);
 
-async function getVoice(blob:Blob):Promise<Voice>{
- const AC=window.AudioContext||(window as typeof window&{webkitAudioContext?:typeof AudioContext}).webkitAudioContext;
- if(!AC)throw Error('Audio analysis is unavailable in this browser.');
- const ctx=new AC();
- try{
-  const audio=await ctx.decodeAudioData(await blob.arrayBuffer()),d=audio.getChannelData(0);
-  const step=Math.max(1,Math.floor(d.length/160000));let sum=0,cross=0,n=0,prev=0;
-  for(let i=0;i<d.length;i+=step){const v=d[i];sum+=v*v;n++;if(i&&((prev<0&&v>=0)||(prev>=0&&v<0)))cross++;prev=v;}
-  const rms=Math.sqrt(sum/Math.max(1,n)),zcr=cross/Math.max(1,n-1);
-  const frame=Math.max(256,Math.floor(audio.sampleRate*.025)),hop=Math.max(128,Math.floor(audio.sampleRate*.01));
-  let frames=0,active=0,pitchSum=0,pitchN=0;
-  for(let s=0;s+frame<d.length;s+=hop){let e=0;for(let j=0;j<frame;j++)e+=d[s+j]**2;const fr=Math.sqrt(e/frame);frames++;if(fr>Math.max(rms*.35,.01)){active++;const minLag=Math.floor(audio.sampleRate/400),maxLag=Math.min(Math.floor(audio.sampleRate/70),frame-1);let best=0,bestC=-Infinity;for(let lag=minLag;lag<=maxLag;lag++){let c=0;for(let j=0;j<frame-lag;j+=4)c+=d[s+j]*d[s+j+lag];if(c>bestC){bestC=c;best=lag;}}const p=best?audio.sampleRate/best:0;if(p>=70&&p<=400){pitchSum+=p;pitchN++;}}}
-  const speechActivity=frames?active/frames:0;
-  // Technical capture gate; microphone hardware has different normal output levels.
-  const durationScore=clamp(audio.duration/18,0,1);
-  const speechScore=clamp(speechActivity/.55,0,1);
-  const levelScore=clamp((rms-.003)/.025,0,1);
-  const qualityScore=Math.round((durationScore*.35+speechScore*.45+levelScore*.20)*100);
-  return{rms:Number(rms.toFixed(6)),zcr:Number(Math.min(1,zcr).toFixed(6)),pitch:Number((pitchN?pitchSum/pitchN:0).toFixed(2)),speechActivity:Number(speechActivity.toFixed(4)),duration:audio.duration,qualityScore};
- }finally{await ctx.close();}
-}
+  const toggleObservation = (item: string) => {
+    setObservations(current => current.includes(item) ? current.filter(value => value !== item) : [...current, item]);
+  };
 
-export const CheckInResearchPage:React.FC=()=>{
- const navigate=useNavigate();const {language,setLanguage}=useLanguage();
- const [step,setStep]=useState(1),[prompt,setPrompt]=useState((PROMPTS[language] || PROMPTS.English)[0]),[mood,setMood]=useState(''),[moodLevel,setMoodLevel]=useState(3);
- const [energy,setEnergy]=useState(3),[fatigue,setFatigue]=useState(3),[sleep,setSleep]=useState(3),[sleepHours,setSleepHours]=useState(8),[awakenings,setAwakenings]=useState(0),[concentration,setConcentration]=useState(3),[stress,setStress]=useState(3);
- const [physical,setPhysical]=useState(''),[physicalNotes,setPhysicalNotes]=useState(''),[observations,setObservations]=useState<string[]>([]);
- const [voice,setVoice]=useState<Voice|null>(null),[camera,setCamera]=useState<Camera|null>(null),[recording,setRecording]=useState(false),[capturing,setCapturing]=useState(false),[seconds,setSeconds]=useState(20),[result,setResult]=useState<AIAnalysisResponse|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false);
- const streamRef=useRef<MediaStream|null>(null),videoRef=useRef<HTMLVideoElement|null>(null),canvasRef=useRef<HTMLCanvasElement|null>(null);
- useEffect(()=>()=>streamRef.current?.getTracks().forEach(t=>t.stop()),[]);
- const info=(t:string,d:string)=><InfoButton title={t}>{d}</InfoButton>;
- const changeLanguage=(l:AppLanguage)=>{setLanguage(l);setPrompt((PROMPTS[l]||PROMPTS.English)[0]);};
- const speak=(message:string,locale='en')=>{
-  if(!('speechSynthesis' in window))return;
-  window.speechSynthesis.cancel();
-  const utterance=new SpeechSynthesisUtterance(message);
-  utterance.lang=locale;
-  utterance.rate=.92;utterance.pitch=1;
-  window.speechSynthesis.speak(utterance);
- };
- const voiceGuidance=()=>speak(`A quick voice check. Find a quiet spot, keep your phone about a handspan away, and speak in your everyday voice. Tell us a little about your day. No need to perform or sound perfect. If the recording is unclear, NUVYRA will explain what to adjust. This checks the recording only, not your health.`);
- const cameraGuidance=()=>speak(`The camera preview is an optional setup check. Place your phone at eye level, face a soft light, and keep it steady. NUVYRA checks basic image brightness and stability only. It does not measure your eyes, expressions, breathing, or health.`);
- useEffect(()=>{if(step===2)voiceGuidance();if(step===3)cameraGuidance();return()=>{if('speechSynthesis' in window)window.speechSynthesis.cancel();};},[step,language]);
- const toggleObs=(x:string)=>setObservations(v=>v.includes(x)?v.filter(y=>y!==x):[...v,x]);
+  const validateSurvey = () => {
+    if (!mood || !physical) {
+      setError('Choose the options that best describe your day before continuing.');
+      return false;
+    }
+    if (![energy, fatigue, sleep, concentration, stress, moodLevel].every(value => Number.isFinite(value) && value >= 1 && value <= 5)) {
+      setError('Please check each rating. Values must be between 1 and 5.');
+      return false;
+    }
+    if (!Number.isFinite(sleepHours) || sleepHours < 0 || sleepHours > 24 || !Number.isInteger(awakenings) || awakenings < 0 || awakenings > 30) {
+      setError('Please check your sleep hours and number of awakenings.');
+      return false;
+    }
+    setError('');
+    return true;
+  };
 
- const record=async()=>{
-  setError('');setVoice(null);
-  try{
-   if(!window.MediaRecorder)throw new Error('Audio recording is not supported by this browser. Please update Chrome or use the installed NUVYRA app.');
-   const stream=await requestMedia('microphone',{audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});streamRef.current=stream;
-   const mimeCandidates=['audio/webm;codecs=opus','audio/webm','audio/mp4'];
-   const mime=mimeCandidates.find(type=>MediaRecorder.isTypeSupported(type));
-   const r=new MediaRecorder(stream,mime?{mimeType:mime}:undefined),chunks:Blob[]=[];r.ondataavailable=e=>e.data.size&&chunks.push(e.data);
-   r.onstop=async()=>{try{const v=await getVoice(new Blob(chunks,{type:mime}));if(v.duration<15||v.speechActivity<.25||v.rms<.004||v.qualityScore<80){setError(`Voice recording quality is ${v.qualityScore}%. NUVYRA requires at least 80% to continue. Please record again: use a quiet room, keep the microphone about 15–20 cm away, speak clearly at your usual pace, and read the full prompt. This score checks recording conditions only, not your health.`);setVoice(null);}else setVoice(v);}catch{setError('Voice analysis failed. Please record the sample again.');}finally{stream.getTracks().forEach(t=>t.stop());streamRef.current=null;setRecording(false);}};
-   r.start(250);setRecording(true);const started=performance.now();const timer=window.setInterval(()=>{const left=Math.max(0,Math.ceil(20-(performance.now()-started)/1000));setSeconds(left);if(!left)window.clearInterval(timer);},250);
-   window.setTimeout(()=>{window.clearInterval(timer);if(r.state!=='inactive')r.stop();},20000);
-  }catch(e){streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setError(e instanceof Error?e.message:'Microphone could not be started. Check app permissions and try again.');setRecording(false);}
- };
+  const analyze = async () => {
+    if (!validateSurvey()) {
+      setStep(1);
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const response = await aiService.analyze({
+        fatigue,
+        energy_level: energy,
+        sleep_quality: sleep,
+        sleep_hours: sleepHours,
+        sleep_awakenings: awakenings,
+        stress_level: stress,
+        concentration_level: concentration,
+        physical_comfort: PHYSICAL_INDEX[physical] || 1,
+        physical_comfort_observation: physical,
+        physical_comfort_notes: physicalNotes,
+        mood_level: moodLevel,
+        mood_deviation: MOOD_DEVIATION[mood] ?? 0,
+        symptom_burden: observations.length / Math.max(1, OBS.English.length),
+        source_duration_seconds: 0
+      });
+      setResult(response);
+    } catch (e: any) {
+      if (e?.status === 401) navigate('/login');
+      else setError(e?.message || 'NUVYRA could not save this check-in. Please review your answers and try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
- const capture=async()=>{
-  setError('');setCamera(null);setCapturing(true);
-  try{
-   const stream=await requestMedia('camera',{video:{width:{ideal:640},height:{ideal:480},facingMode:{ideal:'user'}},audio:false});streamRef.current=stream;
-   if(!videoRef.current||!canvasRef.current)throw Error('Camera preview is unavailable.');
-   videoRef.current.srcObject=stream;await videoRef.current.play();const canvas=canvasRef.current;canvas.width=160;canvas.height=120;
-   const ctx=canvas.getContext('2d',{willReadFrequently:true});if(!ctx)throw Error('Camera analysis is unavailable.');
-   const motion:number[]=[],lum:number[]=[];let prev:Uint8ClampedArray|null=null;const start=performance.now();
-   while(performance.now()-start<10000){ctx.drawImage(videoRef.current,0,0,160,120);const p=ctx.getImageData(0,0,160,120).data;let total=0,diff=0;
-    for(let i=0;i<p.length;i+=4){const v=.2126*p[i]+.7152*p[i+1]+.0722*p[i+2];total+=v;if(prev)diff+=Math.abs(v-(.2126*prev[i]+.7152*prev[i+1]+.0722*prev[i+2]));}
-    motion.push(diff/(160*120*255));lum.push(total/(160*120*255));prev=new Uint8ClampedArray(p);await new Promise(r=>setTimeout(r,200));
-   }
-   const avgLum=mean(lum);
-   if(lum.length<30)throw Error('Camera capture was too short or unstable. Please keep the camera preview open and try again.');
-   // Use a broad acceptable brightness range; do not penalize ordinary well-lit rooms.
-   const lightingScore=avgLum>=.18&&avgLum<=.85?1:avgLum<.18?clamp(avgLum/.18,0,1):clamp((1-avgLum)/.15,0,1);
-   const stabilityScore=clamp(1-mean(motion)/.12,0,1);
-   const qualityScore=Math.round((lightingScore*.55+stabilityScore*.45)*100);
-   if(qualityScore<80)throw Error(`Camera setup quality is ${qualityScore}%. NUVYRA requires at least 80% to continue. Improve the lighting with a soft light in front of you, keep the phone steady, centre yourself in the preview, and record again. This is a technical image-capture check only. Camera measurements are not used in your personal-pattern score.`);
-   const out:Camera={quality_score:qualityScore};
-   setCamera(out);
-  }catch(e:any){setError(e?.message||'Camera analysis failed. Please check camera permission and try again.');}
-  finally{streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setCapturing(false);}
- };
+  const ratingLabels = [
+    ['Energy', energy, setEnergy, ['Very low', 'Low', 'Usual', 'Good', 'High']],
+    ['Fatigue', fatigue, setFatigue, ['None', 'A little', 'Some', 'A lot', 'Extreme']],
+    ['Sleep quality', sleep, setSleep, ['Very poor', 'Poor', 'Okay', 'Good', 'Very good']],
+    ['Concentration', concentration, setConcentration, ['Very difficult', 'Difficult', 'Okay', 'Good', 'Very easy']],
+    ['Stress', stress, setStress, ['Very low', 'Low', 'Moderate', 'High', 'Very high']],
+    ['Mood', moodLevel, setMoodLevel, ['Very low', 'Low', 'Okay', 'Good', 'Very good']]
+  ] as Array<[string, number, React.Dispatch<React.SetStateAction<number>>, string[]]>;
 
- const validateSurvey=()=>{if(!mood||!physical||moodLevel<1||energy<1||fatigue<1||sleep<1||concentration<1||stress<1){setError('Please answer every required 1–5 check-in field before continuing.');return false;}if(sleepHours<0||awakenings<0){setError('Please enter valid sleep hours and awakenings.');return false;}setError('');return true;};
- const analyze=async()=>{
-  setError('');
-  if(!voice||voice.qualityScore<80||voice.duration<15||voice.speechActivity<.25||voice.rms<.004){setVoice(null);setCamera(null);setError('The voice sample has not passed every technical quality requirement (80% minimum, sufficient duration, speech activity and signal level). Please record it again before continuing.');setStep(2);return;}
-  // Camera-derived health features are disabled; camera capture is optional and excluded from the score.
-  setLoading(true);
-  try{setResult(await aiService.analyze({fatigue,energy_level:energy,sleep_quality:sleep, sleep_hours:sleepHours,sleep_awakenings:awakenings,stress_level:stress,concentration_level:concentration,physical_comfort:PHYSICAL_INDEX[physical]||1,physical_comfort_observation:physical,physical_comfort_notes:physicalNotes,mood_level:moodLevel,mood_deviation:moodMap[mood]??0,symptom_burden:observations.length/6,voice_language:language,voice_rms:voice.rms,voice_zero_crossing_rate:voice.zcr,voice_pitch_hz:voice.pitch,voice_speech_activity:voice.speechActivity,source_duration_seconds:voice.duration}));}
-  catch(e:any){if(e?.status===401)navigate('/login');else setError(e?.message||'NUVYRA analysis failed. Please try the check-in again.');}
-  finally{setLoading(false);}
- };
- const PHYSICAL_OPTIONS_EN=['Comfortable','Muscle stiffness','Tremor sensation','Physical weakness','Pain/discomfort','Shortness of breath','Other'];
- const PHYSICAL_INDEX:Record<string,number>={'Comfortable':1,'Muscle stiffness':2,'Tremor sensation':3,'Physical weakness':4,'Pain/discomfort':5,'Shortness of breath':6,'Other':7};
+  return <main className="mx-auto max-w-4xl space-y-6 py-5 text-white">
+    <header className="rounded-3xl border border-slate-800 bg-gradient-to-br from-[#17233a] via-[#111827] to-[#0d1320] p-5 sm:p-7">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-300">NUVYRA · DAILY CHECK-IN</p>
+          <h1 className="mt-2 text-2xl sm:text-3xl font-semibold">A little check-in with yourself</h1>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">A few thoughtful answers help you notice how your days change over time. There are no right or wrong answers.</p>
+        </div>
+        <div className="hidden sm:flex h-14 w-14 items-center justify-center rounded-2xl border border-sky-300/20 bg-sky-300/10 text-2xl text-sky-200">✦</div>
+      </div>
+      <div className="mt-6 flex items-center gap-3">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-700"><div className={`h-full rounded-full bg-gradient-to-r from-sky-400 to-teal-300 transition-all ${step === 1 ? 'w-1/2' : 'w-full'}`} /></div>
+        <span className="text-xs tabular-nums text-slate-400">Step {step} of 2</span>
+      </div>
+    </header>
 
- return <main className="mx-auto max-w-4xl space-y-6 py-5 text-white">
-  <div className="flex justify-between text-xs text-slate-500"><span>DAILY PERSONAL CHECK-IN · {step}/4</span><span>PERSONAL BASELINE</span></div>
-  {error&&<div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">{error}</div>}
+    {error && <div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">{error}</div>}
 
-  {step===1&&<section className="rounded-2xl border border-slate-800 bg-[#111827] p-6 space-y-6">
-   <div><div className="flex items-center gap-2"><h1 className="text-2xl font-semibold">How are you today?</h1>{info('About this step','These are self-reported context signals. Required fields must be completed before analysis. They are not a diagnosis.')}</div><p className="mt-2 text-sm text-slate-400">Use your usual experience today; do not try to give the answer you think NUVYRA expects.</p></div>
-   <div><label className="text-sm text-slate-300">Overall experience</label><div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">{[['better','Better than usual','↗'],['same','About the same','•'],['different','A little different','◌'],['significant','Noticeably different','!']].map(([k,v,icon])=><button type="button" key={k} aria-pressed={mood===k} onClick={()=>setMood(k)} className={`min-h-[104px] rounded-2xl border p-4 text-left transition-all duration-200 ${mood===k?'border-sky-400 bg-sky-500/10 ring-1 ring-sky-400/30':'border-slate-800 bg-slate-900/70 hover:border-slate-600 hover:bg-slate-800'}`}><span className="flex items-center justify-between"><span className="text-2xl text-sky-300">{icon}</span><span className={`h-5 w-5 rounded-full border flex items-center justify-center text-[10px] ${mood===k?'border-sky-400 bg-sky-400 text-slate-950':'border-slate-600 text-transparent'}`}>✓</span></span><span className="mt-3 block text-sm font-medium text-white">{v}</span></button>)}</div></div>
-   <div><p className="text-xs text-slate-500 mb-3">A few quick reflections. Move each slider to match how today feels; there are no right answers.</p><div className="grid md:grid-cols-2 gap-5">
-    {([['Energy level',energy,setEnergy],['Fatigue',fatigue,setFatigue],['Sleep quality',sleep,setSleep],['Concentration',concentration,setConcentration],['Stress',stress,setStress],['Mood',moodLevel,setMoodLevel]] as Array<[string,number,React.Dispatch<React.SetStateAction<number>>]>).map(([label,value,setter])=><label key={label} className="block"><span className="flex justify-between text-sm text-slate-300"><span>{label}</span><span>{value}/5</span></span><input aria-label={label} className="w-full mt-2" type="range" min="1" max="5" value={value} onChange={e=>setter(Number(e.target.value))}/></label>)}
-   </div></div>
-   <div className="grid md:grid-cols-2 gap-4"><label className="block"><span className="text-sm text-slate-300">Hours slept</span><input aria-label="Hours slept" className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950 p-3" type="number" min="0" max="24" step=".5" value={sleepHours} onChange={e=>setSleepHours(Number(e.target.value))}/></label><label className="block"><span className="text-sm text-slate-300">Number of awakenings</span><input aria-label="Number of awakenings" className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950 p-3" type="number" min="0" max="30" value={awakenings} onChange={e=>setAwakenings(Number(e.target.value))}/></label></div>
-   <div><div className="text-sm text-slate-300 mb-2">Physical comfort</div><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">{(PHYSICAL[language] || PHYSICAL.English).map((item,index)=><button type="button" key={item} aria-pressed={physical===PHYSICAL_OPTIONS_EN[index]} onClick={()=>setPhysical(PHYSICAL_OPTIONS_EN[index])} className={`min-h-[82px] rounded-xl border p-3 text-left text-xs transition-all ${physical===PHYSICAL_OPTIONS_EN[index]?'border-sky-400 bg-sky-500/10 text-sky-200 ring-1 ring-sky-400/20':'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-600'}`}><span className="block text-lg text-sky-300 mb-2">{['✓','⌁','≈','↘','◇','≋','+'][index]}</span><span>{item}</span></button>)}</div><details className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><summary className="cursor-pointer text-sm font-medium text-slate-300">Add extra context <span className="text-xs text-slate-500">(optional)</span></summary><textarea aria-label="Physical comfort notes" value={physicalNotes} onChange={e=>setPhysicalNotes(e.target.value)} placeholder="Anything else you want to mention?" className="mt-3 w-full rounded-lg border border-slate-800 bg-slate-950 p-3 text-sm" rows={2}/><div className="mt-4"><div className="text-sm text-slate-300 mb-2">Anything you noticed?</div><div className="flex flex-wrap gap-2">{(OBS[language] || OBS.English).map(item=><button type="button" key={item} onClick={()=>toggleObs(item)} className={`rounded-lg border px-3 py-2 text-xs ${observations.includes(item)?'border-sky-400 bg-sky-500/10 text-sky-300':'border-slate-800 text-slate-400'}`}>{item}</button>)}</div></div></details></div>
-   <button type="button" onClick={()=>validateSurvey()&&setStep(2)} className="w-full rounded-xl bg-sky-500 py-3 font-semibold text-slate-950">Continue to voice</button>
-  </section>}
+    {step === 1 && !result && <section className="space-y-5">
+      <div className="rounded-3xl border border-slate-800 bg-[#111827] p-5 sm:p-7">
+        <div className="flex items-center gap-2"><h2 className="text-lg font-semibold">How has today felt?</h2><InfoButton title="About this question">This is your own description of today compared with your usual experience. It is not a medical assessment.</InfoButton></div>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {MOODS.map(option => <button key={option.key} type="button" aria-pressed={mood === option.key} onClick={() => setMood(option.key)} className={`rounded-2xl border p-4 text-left transition-all ${mood === option.key ? 'border-sky-400 bg-sky-500/10 ring-1 ring-sky-400/20' : 'border-slate-800 bg-slate-900/70 hover:border-slate-600'}`}>
+            <span className="flex items-center justify-between"><span className="text-2xl text-sky-300">{option.icon}</span><span className={`flex h-5 w-5 items-center justify-center rounded-full border text-[10px] ${mood === option.key ? 'border-sky-300 bg-sky-300 text-slate-950' : 'border-slate-600 text-transparent'}`}>✓</span></span>
+            <b className="mt-3 block text-sm text-white">{option.title}</b><span className="mt-1 block text-xs text-slate-400">{option.hint}</span>
+          </button>)}
+        </div>
+      </div>
 
-  {step===2&&<section className="rounded-2xl border border-slate-800 bg-[#111827] p-6 space-y-6">
-   <div><div className="flex items-center gap-2"><h2 className="text-2xl font-semibold">Voice and speech</h2>{info('Voice capture','NUVYRA needs a usable voice sample to calculate voice features. A short or very quiet sample is rejected instead of being scored as missing data.')}</div><div className="grid grid-cols-3 gap-2 mt-3">{APP_LANGUAGES.map(({value:l,native})=><button type="button" key={l} onClick={()=>changeLanguage(l)} className={`rounded-xl border py-2 text-xs ${language===l?'bg-white text-slate-950':'border-slate-700 text-slate-300'}`}>{native}</button>)}</div></div>
-   <div className="rounded-xl border border-slate-800 bg-slate-900 p-5"><p className="text-xs uppercase text-slate-500">Speaking prompt — say this aloud</p><p className="mt-2 leading-7">{prompt}</p><p className="mt-2 text-sm text-slate-300">After the prompt, describe your day in your own words. Include sleep, energy, activities, and anything different from your normal day. Do not guess or exaggerate.</p><button type="button" onClick={()=>speak(prompt,(PROMPTS[language]?APP_LANGUAGES.find(item=>item.value===language)?.locale:'en')||'en')} className="mt-3 mr-4 rounded-lg border border-slate-700 px-3 py-2 text-sm text-sky-300">Hear speaking prompt</button><button type="button" onClick={()=>{const a=(PROMPTS[language] || PROMPTS.English).filter(x=>x!==prompt);setPrompt(a[Math.floor(Math.random()*a.length)]||(PROMPTS[language] || PROMPTS.English)[0])}} className="mt-3 text-sm text-sky-300 underline">Use another prompt</button></div>
-   <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 text-sm leading-6 text-slate-300"><strong className="text-white">Listen first, then follow each instruction</strong><button type="button" onClick={voiceGuidance} className="ml-3 rounded-lg border border-slate-700 px-3 py-1 text-xs text-sky-300">Play voice instructions</button><div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3"><span className="text-lg">⌂</span><b className="mt-1 block text-xs text-white">Find your quiet</b><p className="mt-1 text-xs leading-5 text-slate-400">Pause music and nearby conversations.</p></div>
-    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3"><span className="text-lg">◉</span><b className="mt-1 block text-xs text-white">Set your phone</b><p className="mt-1 text-xs leading-5 text-slate-400">Keep the mic about 15–20 cm away.</p></div>
-    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3"><span className="text-lg">♫</span><b className="mt-1 block text-xs text-white">Talk like yourself</b><p className="mt-1 text-xs leading-5 text-slate-400">Use your usual voice. Pauses are okay.</p></div>
-   </div><p className="mt-2 text-xs text-slate-400">The 80% threshold checks whether the recording is usable. It does not measure speech accuracy or medical accuracy. Voice features are not included in the current personal-pattern score.</p></div>
-   <button type="button" disabled={recording} onClick={record} className="mx-auto block rounded-xl bg-sky-500 px-6 py-3 font-semibold text-slate-950 disabled:opacity-50">{recording?`Recording… ${seconds}s`:voice?'Voice sample captured':'Record 20-second sample'}</button>
-   {voice&&<div className="grid grid-cols-2 gap-2 text-center text-xs text-slate-400">{[['Recording quality',`${voice.qualityScore}%`],['Duration',`${voice.duration.toFixed(1)} s`]].map(([k,v])=><div key={String(k)} className="rounded-xl bg-slate-900 p-3"><b className="block text-white">{v}</b><span>{k}</span></div>)}</div>}
-   <button type="button" disabled={!voice||voice.qualityScore<80||voice.duration<15||voice.speechActivity<.25||voice.rms<.004} onClick={()=>{if(voice&&voice.qualityScore>=80&&voice.duration>=15&&voice.speechActivity>=.25&&voice.rms>=.004)setStep(3);else{setVoice(null);setError("Voice sample did not meet every quality requirement. Please record again.");}}} className="w-full rounded-xl bg-teal-500 py-3 font-semibold text-slate-950 disabled:opacity-40">Continue to camera</button>
-  </section>}
+      <div className="rounded-3xl border border-slate-800 bg-[#111827] p-5 sm:p-7">
+        <div className="mb-5"><h2 className="text-lg font-semibold">A few quick reflections</h2><p className="mt-1 text-xs text-slate-400">Move each slider to match how today feels. The words beside the scale help you choose.</p></div>
+        <div className="grid sm:grid-cols-2 gap-x-7 gap-y-5">
+          {ratingLabels.map(([label, value, setter, words]) => <label key={label} className="block">
+            <span className="flex items-center justify-between text-sm text-slate-200"><span>{label}</span><b className="text-xs font-medium text-sky-300">{words[value - 1]}</b></span>
+            <input aria-label={label} className="mt-3 w-full accent-sky-400" type="range" min="1" max="5" value={value} onChange={event => setter(Number(event.target.value))} />
+            <span className="mt-1 flex justify-between text-[10px] text-slate-500"><span>{words[0]}</span><span>{words[4]}</span></span>
+          </label>)}
+        </div>
+        <div className="mt-6 grid sm:grid-cols-2 gap-4">
+          <label className="block"><span className="text-sm text-slate-300">Hours slept</span><input aria-label="Hours slept" className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 p-3 text-white" type="number" min="0" max="24" step="0.5" value={sleepHours} onChange={event => setSleepHours(Number(event.target.value))} /></label>
+          <label className="block"><span className="text-sm text-slate-300">Times you woke up</span><input aria-label="Times you woke up" className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 p-3 text-white" type="number" min="0" max="30" value={awakenings} onChange={event => setAwakenings(Number(event.target.value))} /></label>
+        </div>
+      </div>
 
-  {step===3&&<section className="rounded-2xl border border-slate-800 bg-[#111827] p-6 space-y-6">
-   <div><div className="flex items-center gap-2"><h2 className="text-2xl font-semibold">Camera and visual check</h2>{info('Camera instructions','For a usable capture, keep the camera at eye level, center your face and upper torso, face a light source, avoid a bright light behind you, keep the camera steady, and remain naturally still.')}</div><div className="mt-3 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 text-sm leading-6 text-slate-300"><strong className="text-white">Listen first, then follow each instruction</strong><button type="button" onClick={cameraGuidance} className="ml-3 rounded-lg border border-slate-700 px-3 py-1 text-xs text-sky-300">Play camera instructions</button><div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3"><span className="text-lg">▣</span><b className="mt-1 block text-xs text-white">Place your phone</b><p className="mt-1 text-xs leading-5 text-slate-400">Eye level, steady and comfortably framed.</p></div>
-    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3"><span className="text-lg">☼</span><b className="mt-1 block text-xs text-white">Find soft light</b><p className="mt-1 text-xs leading-5 text-slate-400">Face a light source; avoid bright backlight.</p></div>
-    <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3"><span className="text-lg">◎</span><b className="mt-1 block text-xs text-white">Stay comfortable</b><p className="mt-1 text-xs leading-5 text-slate-400">Look forward and relax. No poses needed.</p></div>
-   </div><p className="mt-2 text-xs text-slate-400">This is an optional image setup check only. NUVYRA currently does not use camera measurements in the personal-pattern score. It cannot reliably assess facial geometry, eye tracking, blinking, breathing, or disease from this recording.</p></div></div>
-   <video ref={videoRef} muted playsInline className="mx-auto aspect-video w-full max-w-md rounded-xl bg-black object-cover scale-x-[-1]"/><canvas ref={canvasRef} className="hidden"/>
-   <button type="button" disabled={capturing} onClick={capture} className="mx-auto block rounded-xl bg-teal-500 px-6 py-3 font-semibold text-slate-950 disabled:opacity-50">{capturing?'Checking camera…':camera?'Camera sample captured':'Start 10-second camera check'}</button>
-   {camera&&<div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><div className="text-xs text-slate-400">Camera setup quality</div><div className="mt-1 text-2xl font-semibold text-emerald-300">{camera.quality_score}%</div><p className="mt-1 text-xs text-slate-400">Passed the 80% lighting-and-stability threshold. This is not a health or diagnostic confidence score.</p></div>}
-   <div className="grid sm:grid-cols-2 gap-3"><button type="button" disabled={!camera||camera.quality_score<80} onClick={()=>setStep(4)} className="w-full rounded-xl bg-sky-500 py-3 font-semibold text-slate-950 disabled:opacity-40">Continue with image check</button><button type="button" onClick={()=>{setCamera(null);setStep(4);}} className="w-full rounded-xl border border-slate-700 py-3 font-semibold text-slate-200">Continue without camera</button></div>
-  </section>}
+      <div className="rounded-3xl border border-slate-800 bg-[#111827] p-5 sm:p-7">
+        <h2 className="text-lg font-semibold">How does your body feel?</h2>
+        <p className="mt-1 text-xs text-slate-400">Choose the closest description. You can add a note if you want.</p>
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+          {physicalLabels.map((label, index) => <button key={PHYSICAL_OPTIONS_EN[index]} type="button" aria-pressed={physical === PHYSICAL_OPTIONS_EN[index]} onClick={() => setPhysical(PHYSICAL_OPTIONS_EN[index])} className={`min-h-20 rounded-2xl border p-3 text-left text-xs transition-all ${physical === PHYSICAL_OPTIONS_EN[index] ? 'border-teal-300 bg-teal-400/10 text-teal-100' : 'border-slate-800 bg-slate-900/70 text-slate-400 hover:border-slate-600'}`}>
+            <span className="mb-2 block text-lg text-teal-300">{['✓', '⌁', '≈', '↘', '◇', '≋', '+'][index]}</span>{label}
+          </button>)}
+        </div>
+        <details className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+          <summary className="cursor-pointer text-sm font-medium text-slate-300">Add extra context <span className="text-xs text-slate-500">(optional)</span></summary>
+          <textarea aria-label="Additional context" value={physicalNotes} onChange={event => setPhysicalNotes(event.target.value)} placeholder="Anything else you would like NUVYRA to know?" className="mt-3 w-full rounded-xl border border-slate-800 bg-slate-950 p-3 text-sm text-white" rows={2} />
+          <div className="mt-4"><p className="mb-2 text-xs text-slate-400">Anything else you noticed?</p><div className="flex flex-wrap gap-2">{observationLabels.map((label, index) => <button key={label} type="button" aria-pressed={observations.includes(OBS.English[index])} onClick={() => toggleObservation(OBS.English[index])} className={`rounded-full border px-3 py-2 text-xs ${observations.includes(OBS.English[index]) ? 'border-sky-400 bg-sky-500/10 text-sky-200' : 'border-slate-800 text-slate-400'}`}>{label}</button>)}</div></div>
+        </details>
+      </div>
 
-  {step===4&&<section className="rounded-2xl border border-slate-800 bg-[#111827] p-6 space-y-6">
-   <div><h2 className="text-2xl font-semibold">NUVYRA analysis</h2><p className="mt-2 text-sm text-slate-400">Your personal-pattern summary uses the answers you provide and compares them with your own previous check-ins. Voice is checked for recording quality; camera capture is optional. Neither recording is currently used as medical evidence.</p></div>
-   {!result?<><div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[['Your answers',true],['Voice capture',!!voice],['Camera','Optional / excluded'],['Personal baseline','reviewed']].map(([k,v])=><div key={String(k)} className="rounded-xl bg-slate-900 p-4"><div className="text-sm text-white">{k}</div><div className="mt-2 text-xs text-emerald-300">{typeof v==='boolean'?(v?'Ready':'Unavailable'):v}</div></div>)}</div><button type="button" disabled={loading} onClick={analyze} className="w-full rounded-xl bg-sky-500 py-3 font-semibold text-slate-950 disabled:opacity-50">{loading?'Analyzing…':'Analyze check-in'}</button></>:<><div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[['Pattern score',result.overall_score.toFixed(1)],['Answer completeness',`${Math.round(result.data_quality_score*100)}%`],['Baseline observations',String(result.baseline_observations)]].map(([k,v])=><div key={String(k)} className="rounded-xl bg-slate-900 p-4"><div className="text-xs text-slate-400">{k}</div><b className="mt-2 block text-white">{v}</b></div>)}</div><div className="rounded-xl border border-slate-800 p-4"><h3 className="font-semibold">What NUVYRA noticed</h3><p className="mt-2 text-sm leading-6 text-slate-300">{result.explanation}</p></div>{result.context?.document_count>0&&<div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4 space-y-3"><div><h3 className="font-semibold text-white">Your saved records</h3><p className="mt-1 text-xs leading-5 text-slate-400">NUVYRA found {result.context.document_count} uploaded document(s). The extracted details below are background context, not a diagnosis and not inputs to the numerical pattern score.</p></div>{(result.context.analyzed_documents||[]).slice(0,5).map((doc,i)=><div key={doc.filename+i} className="rounded-xl bg-slate-950/60 border border-slate-800 p-3"><div className="flex flex-wrap justify-between gap-2"><b className="text-xs text-slate-200">{doc.filename}</b><span className="text-[10px] text-slate-500">{doc.document_type}</span></div>{doc.summary&&<p className="mt-2 text-xs leading-5 text-slate-300">{doc.summary}</p>}<p className="mt-2 text-[11px] text-slate-500">Tests mentioned: {doc.tests?.length?doc.tests.join(", "):"Not identified"} · Dates found: {doc.dates?.length?doc.dates.join(", "):"Not identified"}</p></div>)}</div>}<div className="rounded-xl border border-slate-800 p-4"><h3 className="font-semibold">Data quality and limitations</h3><ul className="mt-2 space-y-1 text-sm text-slate-400">{(result.limitations||[]).map(x=><li key={x}>{x}</li>)}{(result.missing_modalities||[]).map(x=><li key={x}>Missing: {x}</li>)}</ul></div><button type="button" onClick={()=>navigate('/trends')} className="w-full rounded-xl bg-teal-500 py-3 font-semibold text-slate-950">View longitudinal history</button></>}
-   <button type="button" onClick={()=>setStep(Math.max(1,step-1))} className="text-sm text-slate-400">Back</button>
-  </section>}
- </main>;
+      <button type="button" onClick={() => validateSurvey() && setStep(2)} className="w-full rounded-2xl bg-gradient-to-r from-sky-400 to-teal-300 py-4 font-semibold text-slate-950 shadow-lg shadow-sky-950/20 transition hover:brightness-105">Review my check-in <span className="ml-1">→</span></button>
+    </section>}
+
+    {step === 2 && !result && <section className="rounded-3xl border border-slate-800 bg-[#111827] p-5 sm:p-7 space-y-5">
+      <div><p className="text-[11px] uppercase tracking-[0.18em] text-teal-300">Almost there</p><h2 className="mt-2 text-xl font-semibold">Your check-in, at a glance</h2><p className="mt-1 text-sm text-slate-400">Take a quick look before saving. You can go back and change anything.</p></div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {[['Today felt', MOODS.find(item => item.key === mood)?.title || 'Not selected'], ['Energy', `${energy}/5`], ['Fatigue', `${fatigue}/5`], ['Sleep', `${sleep}/5 · ${sleepHours}h`], ['Stress', `${stress}/5`], ['Physical comfort', physical]].map(([label, value]) => <div key={label} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 text-sm font-medium text-white">{value}</p></div>)}
+      </div>
+      <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4"><p className="text-sm text-slate-200">NUVYRA compares your answers with your own previous check-ins. It does not diagnose a condition. No microphone or camera recording is required for this version of the check-in.</p></div>
+      <div className="grid sm:grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="rounded-2xl border border-slate-700 py-3 text-sm font-semibold text-slate-200">Back to edit</button><button type="button" disabled={loading} onClick={analyze} className="rounded-2xl bg-gradient-to-r from-sky-400 to-teal-300 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50">{loading ? 'Saving your check-in…' : 'Save check-in'}</button></div>
+    </section>}
+
+    {result && <section className="space-y-5">
+      <div className="rounded-3xl border border-slate-800 bg-[#111827] p-5 sm:p-7">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-teal-300">Check-in saved</p>
+        <h2 className="mt-2 text-xl font-semibold">Your personal picture</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-300">{result.explanation}</p>
+        <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="rounded-2xl bg-slate-950/60 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Personal reference</p><b className="mt-2 block text-lg text-white">{result.baseline_observations >= 5 ? 'Ready' : 'Building'}</b></div>
+          <div className="rounded-2xl bg-slate-950/60 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Required answers</p><b className="mt-2 block text-lg text-white">{Math.round(result.data_quality_score * 100)}% complete</b></div>
+          {result.baseline_observations >= 5 && <div className="rounded-2xl bg-slate-950/60 p-4"><p className="text-[10px] uppercase tracking-wider text-slate-500">Personal pattern index</p><b className="mt-2 block text-lg text-white">{result.overall_score.toFixed(0)} / 100</b></div>}
+        </div>
+        {result.baseline_observations < 5 && <p className="mt-4 rounded-2xl border border-sky-500/20 bg-sky-500/5 p-3 text-xs leading-5 text-slate-300">Your personal reference is still taking shape. NUVYRA will show comparisons after at least five check-ins using this version of the method.</p>}
+      </div>
+
+      {result.context?.document_count > 0 && <div className="rounded-3xl border border-violet-500/20 bg-violet-500/5 p-5 space-y-3">
+        <div><h3 className="font-semibold text-white">Your saved records</h3><p className="mt-1 text-xs leading-5 text-slate-400">NUVYRA found {result.context.document_count} uploaded document(s). These summaries are background context only. Their laboratory values are not used in the personal pattern index.</p></div>
+        {(result.context.analyzed_documents || []).slice(0, 5).map((doc, index) => <div key={doc.filename + index} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3"><div className="flex flex-wrap justify-between gap-2"><b className="text-xs text-slate-200">{doc.filename}</b><span className="text-[10px] text-slate-500">{doc.document_type}</span></div>{doc.summary && <p className="mt-2 text-xs leading-5 text-slate-300">{doc.summary}</p>}<p className="mt-2 text-[11px] text-slate-500">Tests mentioned: {doc.tests?.length ? doc.tests.join(', ') : 'Not identified'} · Dates found: {doc.dates?.length ? doc.dates.join(', ') : 'Not identified'}</p></div>)}
+      </div>}
+
+      <div className="rounded-3xl border border-slate-800 bg-[#111827] p-5 sm:p-7"><h3 className="font-semibold">What to keep in mind</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-400">{(result.limitations || []).map(item => <li key={item}>• {item}</li>)}</ul></div>
+      <div className="grid sm:grid-cols-2 gap-3"><button type="button" onClick={() => navigate('/trends')} className="rounded-2xl bg-teal-400 py-3 font-semibold text-slate-950">View my trends</button><button type="button" onClick={() => navigate('/dashboard')} className="rounded-2xl border border-slate-700 py-3 font-semibold text-slate-200">Back to home</button></div>
+    </section>}
+  </main>;
 };
