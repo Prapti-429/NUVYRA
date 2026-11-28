@@ -32,7 +32,7 @@ from app.schemas.auth_schemas import LoginRequest, TokenResponse, UserRegisterRe
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_DURATION_MINUTES = 15
 PASSWORD_RESET_TTL_MINUTES = 30
-PASSWORD_RESET_RESEND_SECONDS = 60
+PASSWORD_RESET_RESEND_SECONDS = 15
 logger = logging.getLogger(__name__)
 
 

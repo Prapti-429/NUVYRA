@@ -265,6 +265,14 @@ def test_forgot_password_sends_single_use_reset_link_and_updates_password(
     assert "If an account exists" in requested.json()["detail"]
     assert len(sent_messages) == 1
 
+    # A repeat request inside the 15-second cooldown must not send another email.
+    repeated = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "patient@example.com"},
+    )
+    assert repeated.status_code == status.HTTP_200_OK
+    assert len(sent_messages) == 1
+
     body = sent_messages[0].get_content()
     reset_url = next(line for line in body.splitlines() if "/reset-password?token=" in line)
     raw_token = parse_qs(urlparse(reset_url).query)["token"][0]
