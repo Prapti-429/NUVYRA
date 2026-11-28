@@ -5,6 +5,7 @@ import { Card, CardHeader, CardBody, CardFooter } from '../components/ui/Card';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
+import { NuvyraLogo } from '../components/common/NuvyraLogo';
 import { useHealth } from '../hooks/useHealth';
 import { 
   TECHNICAL_STACK_METRICS, 
@@ -20,7 +21,8 @@ export const HomePage: React.FC = () => {
     <Container>
       <Section className="space-y-8">
         <div className="border-b border-slate-800 pb-6 flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-          <div>
+          <div className="space-y-4">
+            <NuvyraLogo size="md" />
             <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
               Longitudinal Multimodal Signal Processing
             </h1>
