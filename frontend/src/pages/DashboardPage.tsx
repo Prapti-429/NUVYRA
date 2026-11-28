@@ -96,9 +96,9 @@ export const DashboardPage: React.FC = () => {
   const cards = latest?.features?.filter(f => !/survey|self[_ -]?report/i.test(`${f.category || ''} ${f.name || ''}`)).slice(0, 6).map(makeCard) ?? [];
   const fallback: CardData[] = [
     { signal:'Voice & speech', parameter:'Waiting for voice feature', unit:'—', value:null, deviation:null, meaning:'Complete a check-in so NUVYRA can extract the speech features.' },
-    { signal:'Facial movement', parameter:'Waiting for facial feature', unit:'—', value:null, deviation:null, meaning:'Complete a camera check so NUVYRA can extract facial movement features.' },
-    { signal:'Eyes & blinking', parameter:'Waiting for eye feature', unit:'—', value:null, deviation:null, meaning:'Complete a camera check so NUVYRA can estimate eye-related research features.' },
-    { signal:'Movement', parameter:'Waiting for movement feature', unit:'—', value:null, deviation:null, meaning:'Complete a movement check so NUVYRA can extract movement features.' },
+    { signal:'Daily reflection', parameter:'Your energy pattern', unit:'self-report', value:null, deviation:null, meaning:'Your own check-in answers help build a personal picture over time.' },
+    { signal:'Daily reflection', parameter:'Your sleep pattern', unit:'self-report', value:null, deviation:null, meaning:'Sleep information is based on what you report, not a sensor-based sleep test.' },
+    { signal:'Daily reflection', parameter:'Your stress and focus', unit:'self-report', value:null, deviation:null, meaning:'These are personal reflections, not medical measurements.' },
   ];
   const visibleCards = cards.length ? cards : fallback;
   const trendData = useMemo(() => history?.items?.map(item => ({ date:new Date(item.generated_at).toLocaleDateString(undefined,{month:'short',day:'numeric'}), value:Math.round(item.score) })) ?? [], [history]);
