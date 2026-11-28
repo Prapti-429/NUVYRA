@@ -12,7 +12,7 @@ const explain: Record<string, string> = {
   stress_level: 'Your own rating of how stressed you felt today.',
   concentration_level: 'Your own rating of how easy it felt to focus today.',
   physical_comfort: 'The physical-comfort option you selected. It is not an examination.',
-
+};
 
 const featureValue = (name: string, value: number) => {
   if (name === 'mood_deviation') return value <= .1 ? 'About the same / better' : value < .75 ? 'A little different' : 'Noticeably different';
