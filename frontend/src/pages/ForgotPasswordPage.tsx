@@ -28,7 +28,7 @@ export const ForgotPasswordPage: React.FC = () => {
       setError('Your new password must contain at least 12 characters.');
       return;
     }
-    if (token && (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\\d/.test(password) || !/[!@#$%^&*(),.?":{}|<>]/.test(password))) {
+    if (token && (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password) || !/[!@#$%^&*(),.?":{}|<>]/.test(password))) {
       setError('Use uppercase and lowercase letters, a number and a special character.');
       return;
     }
